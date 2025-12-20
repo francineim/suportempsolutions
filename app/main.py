@@ -1,9 +1,9 @@
 import streamlit as st
 from pathlib import Path
 
-from app.database import criar_tabelas
-from app.auth import autenticar, criar_usuario
-from app.chamados import criar_chamado, listar_chamados, atualizar_status
+from database import criar_tabelas
+from auth import autenticar, criar_usuario
+from chamados import criar_chamado, listar_chamados, atualizar_status
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
