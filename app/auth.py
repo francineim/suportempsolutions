@@ -1,5 +1,4 @@
 import streamlit as st
-import sqlite3
 from database import conectar
 
 
@@ -29,3 +28,27 @@ def login():
             st.sidebar.error("Usuário ou senha inválidos")
 
     return None
+
+
+def tela_cadastro_usuario():
+    st.subheader("Cadastro de Usuários")
+
+    usuario = st.text_input("Usuário")
+    senha = st.text_input("Senha", type="password")
+    perfil = st.selectbox("Perfil", ["admin", "cliente", "suporte"])
+
+    if st.button("Cadastrar usuário"):
+        conn = conectar()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
+                (usuario, senha, perfil)
+            )
+            conn.commit()
+            st.success("Usuário cadastrado com sucesso")
+        except Exception as e:
+            st.error("Usuário já existe ou erro ao cadastrar")
+        finally:
+            conn.close()
