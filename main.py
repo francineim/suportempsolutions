@@ -1,11 +1,14 @@
 import streamlit as st
 
-from app.database import criar_tabelas
-from app.chamados import tela_chamados
-from app.dashboard import tela_dashboard
-from app.auth import login
+from database import criar_tabelas
+from chamados import tela_chamados
+from dashboard import tela_dashboard
+from auth import login
 
-st.set_page_config(page_title="Helpdesk MP Solutions", layout="wide")
+st.set_page_config(
+    page_title="Helpdesk MP Solutions",
+    layout="wide"
+)
 
 def main():
     criar_tabelas()
@@ -20,6 +23,7 @@ def main():
 
         if menu == "Chamados":
             tela_chamados(usuario_logado)
+
         elif menu == "Dashboard":
             tela_dashboard()
 
