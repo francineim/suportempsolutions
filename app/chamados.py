@@ -1,4 +1,4 @@
-from app.database import conectar
+from database import conectar
 
 
 def criar_chamado(usuario, assunto, prioridade, descricao, anexo):
