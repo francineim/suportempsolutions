@@ -1,44 +1,47 @@
+import streamlit as st
 from database import conectar
 
 
-def criar_chamado(usuario, assunto, prioridade, descricao, anexo):
-    conn = conectar()
-    cur = conn.cursor()
+def tela_chamados(usuario):
+    st.subheader("Chamados")
 
-    cur.execute("""
-        INSERT INTO chamados (
-            usuario, assunto, prioridade, descricao, status, anexo
+    conn = conectar()
+    cursor = conn.cursor()
+
+    with st.expander("➕ Novo chamado"):
+        assunto = st.text_input("Assunto")
+        prioridade = st.selectbox(
+            "Prioridade",
+            ["Muito Alta", "Alta", "Baixa"]
         )
-        VALUES (?, ?, ?, ?, 'Aberto', ?)
-    """, (usuario, assunto, prioridade, descricao, anexo))
+        descricao = st.text_area("Descrição do problema")
 
-    conn.commit()
-    conn.close()
+        if st.button("Abrir chamado"):
+            cursor.execute("""
+                INSERT INTO chamados
+                (assunto, prioridade, descricao, status, usuario)
+                VALUES (?, ?, ?, 'Novo', ?)
+            """, (assunto, prioridade, descricao, usuario))
+            conn.commit()
+            st.success("Chamado aberto com sucesso")
+            st.experimental_rerun()
 
+    st.divider()
 
-def listar_chamados():
-    conn = conectar()
-    cur = conn.cursor()
+    st.subheader("Meus chamados")
 
-    cur.execute("""
-        SELECT id, usuario, assunto, prioridade, descricao, status, anexo
+    cursor.execute("""
+        SELECT id, assunto, prioridade, status, data_abertura
         FROM chamados
-        ORDER BY id DESC
-    """)
+        WHERE usuario = ?
+        ORDER BY data_abertura DESC
+    """, (usuario,))
 
-    chamados = cur.fetchall()
+    chamados = cursor.fetchall()
     conn.close()
-    return chamados
 
-
-def atualizar_status(chamado_id, novo_status):
-    conn = conectar()
-    cur = conn.cursor()
-
-    cur.execute(
-        "UPDATE chamados SET status=? WHERE id=?",
-        (novo_status, chamado_id)
-    )
-
-    conn.commit()
-    conn.close()
+    for ch in chamados:
+        with st.expander(f"#{ch['id']} - {ch['assunto']}"):
+            st.write(f"📌 Prioridade: {ch['prioridade']}")
+            st.write(f"📍 Status: {ch['status']}")
+            st.write(f"📅 Abertura: {ch['data_abertura']}")
