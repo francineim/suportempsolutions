@@ -1,9 +1,9 @@
 import streamlit as st
 from pathlib import Path
 
-from database import criar_tabelas
-from auth import autenticar, criar_usuario
-from chamados import criar_chamado, listar_chamados, atualizar_status
+from app.database import criar_tabelas
+from app.auth import autenticar, criar_usuario
+from app.chamados import criar_chamado, listar_chamados, atualizar_status
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -96,5 +96,3 @@ for c in listar_chamados():
             atualizar_status(chamado_id, novo_status)
             st.success("Status atualizado")
             st.rerun()
-
-
