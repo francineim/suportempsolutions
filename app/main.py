@@ -1,7 +1,7 @@
 import streamlit as st
 
 from database import criar_tabelas
-from auth import login
+from auth import login, tela_cadastro_usuario
 from chamados import tela_chamados
 from dashboard import tela_dashboard
 
@@ -16,16 +16,23 @@ def main():
     usuario_logado = login()
 
     if usuario_logado:
-        menu = st.sidebar.selectbox(
-            "Menu",
-            ["Chamados", "Dashboard"]
-        )
+        perfil = st.session_state.perfil
 
-        if menu == "Chamados":
+        menu = ["Chamados", "Dashboard"]
+
+        if perfil == "admin":
+            menu.append("Usuários")
+
+        escolha = st.sidebar.selectbox("Menu", menu)
+
+        if escolha == "Chamados":
             tela_chamados(usuario_logado)
 
-        elif menu == "Dashboard":
+        elif escolha == "Dashboard":
             tela_dashboard()
+
+        elif escolha == "Usuários":
+            tela_cadastro_usuario()
 
 if __name__ == "__main__":
     main()
