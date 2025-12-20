@@ -1,4 +1,4 @@
-from database import conectar
+from app.database import conectar
 
 
 def criar_chamado(usuario, assunto, prioridade, descricao, anexo):
@@ -42,4 +42,3 @@ def atualizar_status(chamado_id, novo_status):
 
     conn.commit()
     conn.close()
-
