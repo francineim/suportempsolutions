@@ -37,5 +37,11 @@ def criar_tabelas():
         )
     """)
 
+    # 🔐 ADMIN INICIAL (garantido)
+    cursor.execute("""
+        INSERT OR IGNORE INTO usuarios (usuario, senha, perfil)
+        VALUES ('admin', 'admin', 'admin')
+    """)
+
     conn.commit()
     conn.close()
