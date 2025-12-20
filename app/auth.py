@@ -1,28 +1,31 @@
+import streamlit as st
+import sqlite3
 from database import conectar
 
 
-def autenticar(usuario, senha):
-    conn = conectar()
-    cur = conn.cursor()
+def login():
+    st.sidebar.subheader("Login")
 
-    cur.execute(
-        "SELECT usuario, perfil FROM usuarios WHERE usuario=? AND senha=?",
-        (usuario, senha)
-    )
+    usuario = st.sidebar.text_input("Usuário")
+    senha = st.sidebar.text_input("Senha", type="password")
 
-    user = cur.fetchone()
-    conn.close()
-    return user
+    if st.sidebar.button("Entrar"):
+        conn = conectar()
+        cursor = conn.cursor()
 
+        cursor.execute(
+            "SELECT usuario, perfil FROM usuarios WHERE usuario = ? AND senha = ?",
+            (usuario, senha)
+        )
+        user = cursor.fetchone()
+        conn.close()
 
-def criar_usuario(usuario, senha, perfil="cliente"):
-    conn = conectar()
-    cur = conn.cursor()
+        if user:
+            st.session_state.usuario = user["usuario"]
+            st.session_state.perfil = user["perfil"]
+            st.sidebar.success(f"Bem-vindo, {user['usuario']}")
+            return user["usuario"]
+        else:
+            st.sidebar.error("Usuário ou senha inválidos")
 
-    cur.execute(
-        "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
-        (usuario, senha, perfil)
-    )
-
-    conn.commit()
-    conn.close()
+    return None
