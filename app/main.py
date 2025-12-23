@@ -1,13 +1,19 @@
 import streamlit as st
+import sys
+import os
 
-from database import criar_tabelas_completas, verificar_banco
+# Adicionar o diretório atual ao path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from database import criar_banco_se_nao_existir, verificar_estrutura
 from auth import login, tela_cadastro_usuario
 from chamados import tela_chamados
 from dashboard import tela_dashboard
 
 st.set_page_config(
     page_title="Helpdesk MP Solutions",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 def main():
@@ -20,27 +26,37 @@ def main():
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
     
-    # Botão de emergência para criar tabelas
+    # Sidebar - Menu de sistema
     with st.sidebar:
-        st.subheader("🔧 Configuração do Sistema")
+        st.header("⚙️ Sistema")
         
-        if st.button("🔄 Verificar/Criar Banco de Dados", type="secondary"):
-            status = verificar_banco()
-            
-            if status.get("erro"):
-                st.error(f"Erro: {status['erro']}")
-            else:
-                st.write("**Tabelas encontradas:**")
-                for tabela in status.get("tabelas", []):
-                    st.write(f"- {tabela}")
-                
-                if not status.get("usuarios_existe"):
-                    st.warning("Tabela 'usuarios' não encontrada!")
-                    if st.button("📦 Criar Todas as Tabelas"):
-                        resultado = criar_tabelas_completas()
-                        if resultado.get("admin_criado"):
-                            st.success("✅ Sistema configurado! Admin: admin/sucodepao")
-                            st.rerun()
+        # Botão de emergência para reset
+        if st.button("🆘 Resetar Banco (Emergência)", type="secondary"):
+            st.session_state.show_reset = True
+        
+        if st.session_state.get('show_reset', False):
+            st.warning("Deseja realmente resetar o banco?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Sim, resetar"):
+                    # Importar e executar reset
+                    from reset_db import resetar_banco_completo
+                    resetar_banco_completo()
+                    st.session_state.show_reset = False
+                    st.rerun()
+            with col2:
+                if st.button("❌ Cancelar"):
+                    st.session_state.show_reset = False
+                    st.rerun()
+    
+    # Criar banco se não existir
+    criar_banco_se_nao_existir()
+    
+    # Verificar estrutura
+    estrutura = verificar_estrutura()
+    if estrutura["status"] == "error":
+        st.error(f"⚠️ Problema no banco: {estrutura['message']}")
+        st.info("Use o botão 'Resetar Banco' na sidebar para corrigir")
     
     # Se já está logado
     if st.session_state.usuario:
@@ -69,7 +85,6 @@ def main():
         # Tela de login
         usuario_logado = login()
         
-        # Se fez login com sucesso, recarregar
         if usuario_logado:
             st.rerun()
 
