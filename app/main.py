@@ -1,5 +1,6 @@
 import streamlit as st
-from database import criar_tabelas
+
+from database import criar_tabelas_completas, verificar_banco
 from auth import login, tela_cadastro_usuario
 from chamados import tela_chamados
 from dashboard import tela_dashboard
@@ -13,18 +14,33 @@ def main():
     # Título principal
     st.title("🔧 Helpdesk MP Solutions")
     
-    # Criar tabelas e usuário admin se necessário
-    admin_criado = criar_tabelas()
-    
-    # Se admin foi criado agora, mostrar mensagem
-    if admin_criado:
-        st.success("✅ Usuário admin padrão criado: 'admin' com senha 'sucodepao'")
-    
     # Inicializar estado da sessão
     if 'usuario' not in st.session_state:
         st.session_state.usuario = None
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
+    
+    # Botão de emergência para criar tabelas
+    with st.sidebar:
+        st.subheader("🔧 Configuração do Sistema")
+        
+        if st.button("🔄 Verificar/Criar Banco de Dados", type="secondary"):
+            status = verificar_banco()
+            
+            if status.get("erro"):
+                st.error(f"Erro: {status['erro']}")
+            else:
+                st.write("**Tabelas encontradas:**")
+                for tabela in status.get("tabelas", []):
+                    st.write(f"- {tabela}")
+                
+                if not status.get("usuarios_existe"):
+                    st.warning("Tabela 'usuarios' não encontrada!")
+                    if st.button("📦 Criar Todas as Tabelas"):
+                        resultado = criar_tabelas_completas()
+                        if resultado.get("admin_criado"):
+                            st.success("✅ Sistema configurado! Admin: admin/sucodepao")
+                            st.rerun()
     
     # Se já está logado
     if st.session_state.usuario:
@@ -53,7 +69,7 @@ def main():
         # Tela de login
         usuario_logado = login()
         
-        # Se fez login com sucesso, recarregar a página
+        # Se fez login com sucesso, recarregar
         if usuario_logado:
             st.rerun()
 
