@@ -7,10 +7,13 @@ def conectar():
 
 
 def criar_tabelas():
+    """Cria as tabelas do banco de dados e insere um usuário admin padrão se não existir.
+    Retorna True se o usuário admin foi criado, False caso contrário.
+    """
     conn = conectar()
     cursor = conn.cursor()
 
-    # Tabela de usuários (adicione esta linha)
+    # Tabela de usuários
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,6 +24,7 @@ def criar_tabelas():
         )
     """)
 
+    # Tabela de chamados
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS chamados (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,14 +37,16 @@ def criar_tabelas():
         )
     """)
 
-    # Inserir um usuário admin padrão se a tabela estiver vazia
+    # Verificar e criar usuário admin padrão
     cursor.execute("SELECT COUNT(*) as count FROM usuarios")
+    admin_criado = False
     if cursor.fetchone()["count"] == 0:
         cursor.execute(
             "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
             ("admin", "admin123", "admin")
         )
-        st.info("Usuário padrão criado: admin/admin123")
+        admin_criado = True  # Marca que o admin foi criado
 
     conn.commit()
     conn.close()
+    return admin_criado  # Retorna a informação
