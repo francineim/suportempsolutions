@@ -13,10 +13,14 @@ def criar_tabelas():
     """
     conn = conectar()
     cursor = conn.cursor()
+    
+    # REMOVER tabelas existentes (isso apagará todos os dados!)
+    cursor.execute("DROP TABLE IF EXISTS usuarios")
+    cursor.execute("DROP TABLE IF EXISTS chamados")
 
-    # Tabela de usuários
+    # Tabela de usuários (COM senha_hash)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
+        CREATE TABLE usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             usuario TEXT UNIQUE NOT NULL,
             senha_hash TEXT NOT NULL,
@@ -27,7 +31,7 @@ def criar_tabelas():
 
     # Tabela de chamados
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS chamados (
+        CREATE TABLE chamados (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             assunto TEXT NOT NULL,
             prioridade TEXT NOT NULL,
@@ -38,20 +42,16 @@ def criar_tabelas():
         )
     """)
 
-    # Verificar e criar usuário admin padrão
-    cursor.execute("SELECT COUNT(*) as count FROM usuarios")
-    admin_criado = False
-    if cursor.fetchone()["count"] == 0:
-        # Gerar hash da senha
-        senha = "sucodepao"
-        salt = bcrypt.gensalt()
-        senha_hash = bcrypt.hashpw(senha.encode('utf-8'), salt)
-        
-        cursor.execute(
-            "INSERT INTO usuarios (usuario, senha_hash, perfil) VALUES (?, ?, ?)",
-            ("admin", senha_hash, "admin")
-        )
-        admin_criado = True
+    # Criar usuário admin padrão
+    senha = "sucodepao"
+    salt = bcrypt.gensalt()
+    senha_hash = bcrypt.hashpw(senha.encode('utf-8'), salt)
+    
+    cursor.execute(
+        "INSERT INTO usuarios (usuario, senha_hash, perfil) VALUES (?, ?, ?)",
+        ("admin", senha_hash, "admin")
+    )
+    admin_criado = True
 
     conn.commit()
     conn.close()
@@ -60,4 +60,8 @@ def criar_tabelas():
 
 def verificar_senha(senha_digitada, senha_hash_armazenada):
     """Verifica se a senha digitada corresponde ao hash armazenado."""
+    # O hash armazenado pode ser bytes ou string
+    if isinstance(senha_hash_armazenada, str):
+        senha_hash_armazenada = senha_hash_armazenada.encode('utf-8')
+    
     return bcrypt.checkpw(senha_digitada.encode('utf-8'), senha_hash_armazenada)
