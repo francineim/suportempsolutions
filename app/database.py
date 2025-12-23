@@ -1,30 +1,20 @@
 import sqlite3
-import streamlit as st
 import os
 
 def conectar():
-    """Conecta ao banco de dados SQLite."""
-    # Verificar se o arquivo do banco existe
-    db_path = "database.db"
-    
-    # Se não existir, criar diretório se necessário
-    if not os.path.exists(db_path):
-        st.sidebar.info("📁 Criando novo banco de dados...")
-    
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Conecta ao banco de dados SQLite de forma SIMPLES."""
+    return sqlite3.connect("database.db", check_same_thread=False)
 
 
-def criar_tabelas_usuarios():
-    """Cria APENAS a tabela de usuários e insere admin."""
-    conn = conectar()
-    cursor = conn.cursor()
-    
-    try:
-        # Criar tabela de usuários (se não existir)
+def criar_banco_se_nao_existir():
+    """Cria o banco de dados apenas se não existir."""
+    if not os.path.exists("database.db"):
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        # Criar tabela de usuários (SEMPRE 'senha', NUNCA 'senha_hash')
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS usuarios (
+            CREATE TABLE usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 usuario TEXT UNIQUE NOT NULL,
                 senha TEXT NOT NULL,
@@ -33,56 +23,9 @@ def criar_tabelas_usuarios():
             )
         """)
         
-        conn.commit()
-        
-        # Verificar se admin existe
-        cursor.execute("SELECT COUNT(*) as total FROM usuarios WHERE usuario = 'admin'")
-        admin_existe = cursor.fetchone()["total"]
-        
-        # Criar admin se não existir
-        if admin_existe == 0:
-            cursor.execute(
-                "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
-                ("admin", "sucodepao", "admin")
-            )
-            conn.commit()
-            
-        # Contar usuários
-        cursor.execute("SELECT COUNT(*) as total FROM usuarios")
-        total = cursor.fetchone()["total"]
-        
-        cursor.execute("SELECT usuario, perfil FROM usuarios")
-        usuarios = cursor.fetchall()
-        
-        conn.close()
-        
-        return {
-            "admin_criado": admin_existe == 0,
-            "total_usuarios": total,
-            "lista_usuarios": [u["usuario"] for u in usuarios]
-        }
-        
-    except Exception as e:
-        conn.close()
-        return {
-            "admin_criado": False,
-            "total_usuarios": 0,
-            "lista_usuarios": [],
-            "erro": str(e)
-        }
-
-
-def criar_tabelas_completas():
-    """Cria todas as tabelas do sistema."""
-    resultado = criar_tabelas_usuarios()
-    
-    # Agora criar a tabela de chamados
-    conn = conectar()
-    cursor = conn.cursor()
-    
-    try:
+        # Criar tabela de chamados
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS chamados (
+            CREATE TABLE chamados (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 assunto TEXT NOT NULL,
                 prioridade TEXT NOT NULL,
@@ -93,47 +36,47 @@ def criar_tabelas_completas():
             )
         """)
         
+        # Inserir admin padrão
+        cursor.execute(
+            "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
+            ("admin", "sucodepao", "admin")
+        )
+        
         conn.commit()
         conn.close()
-        
-        return resultado
-        
-    except Exception as e:
-        conn.close()
-        resultado["erro"] = str(e)
-        return resultado
+        return True
+    return False
 
 
-def verificar_banco():
-    """Verifica se o banco de dados está funcional."""
+def verificar_estrutura():
+    """Verifica se a estrutura do banco está correta."""
+    conn = conectar()
+    cursor = conn.cursor()
+    
     try:
-        conn = conectar()
-        cursor = conn.cursor()
+        # Verificar se a tabela usuarios existe e tem coluna 'senha'
+        cursor.execute("PRAGMA table_info(usuarios)")
+        colunas = cursor.fetchall()
         
-        # Verificar se tabela usuarios existe
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='usuarios'")
-        usuarios_existe = cursor.fetchone() is not None
+        if not colunas:
+            return {"status": "error", "message": "Tabela 'usuarios' não existe"}
         
-        # Verificar se tabela chamados existe
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chamados'")
-        chamados_existe = cursor.fetchone() is not None
+        colunas_nomes = [col[1] for col in colunas]
         
-        # Listar todas as tabelas
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tabelas = cursor.fetchall()
+        if 'senha' not in colunas_nomes:
+            return {"status": "error", "message": f"Coluna 'senha' não encontrada. Colunas existentes: {colunas_nomes}"}
         
-        conn.close()
+        # Contar usuários
+        cursor.execute("SELECT COUNT(*) as total FROM usuarios")
+        total = cursor.fetchone()[0]
         
         return {
-            "usuarios_existe": usuarios_existe,
-            "chamados_existe": chamados_existe,
-            "tabelas": [t[0] for t in tabelas]
+            "status": "ok",
+            "colunas": colunas_nomes,
+            "total_usuarios": total
         }
         
     except Exception as e:
-        return {
-            "usuarios_existe": False,
-            "chamados_existe": False,
-            "tabelas": [],
-            "erro": str(e)
-        }
+        return {"status": "error", "message": str(e)}
+    finally:
+        conn.close()
