@@ -1,4 +1,5 @@
 import sqlite3
+import bcrypt
 
 def conectar():
     conn = sqlite3.connect("database.db", check_same_thread=False)
@@ -18,7 +19,7 @@ def criar_tabelas():
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             usuario TEXT UNIQUE NOT NULL,
-            senha TEXT NOT NULL,
+            senha_hash TEXT NOT NULL,
             perfil TEXT NOT NULL,
             data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -41,12 +42,22 @@ def criar_tabelas():
     cursor.execute("SELECT COUNT(*) as count FROM usuarios")
     admin_criado = False
     if cursor.fetchone()["count"] == 0:
+        # Gerar hash da senha
+        senha = "sucodepao"
+        salt = bcrypt.gensalt()
+        senha_hash = bcrypt.hashpw(senha.encode('utf-8'), salt)
+        
         cursor.execute(
-            "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
-            ("admin", "admin123", "admin")
+            "INSERT INTO usuarios (usuario, senha_hash, perfil) VALUES (?, ?, ?)",
+            ("admin", senha_hash, "admin")
         )
-        admin_criado = True  # Marca que o admin foi criado
+        admin_criado = True
 
     conn.commit()
     conn.close()
-    return admin_criado  # Retorna a informação
+    return admin_criado
+
+
+def verificar_senha(senha_digitada, senha_hash_armazenada):
+    """Verifica se a senha digitada corresponde ao hash armazenado."""
+    return bcrypt.checkpw(senha_digitada.encode('utf-8'), senha_hash_armazenada)
