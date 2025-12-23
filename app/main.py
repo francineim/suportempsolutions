@@ -1,5 +1,4 @@
 import streamlit as st
-
 from database import criar_tabelas
 from auth import login, tela_cadastro_usuario
 from chamados import tela_chamados
@@ -11,50 +10,52 @@ st.set_page_config(
 )
 
 def main():
-    # Criar tabelas e verificar se admin foi criado
+    # Título principal
+    st.title("🔧 Helpdesk MP Solutions")
+    
+    # Criar tabelas e usuário admin se necessário
     admin_criado = criar_tabelas()
     
-    # Mostrar mensagem se o admin foi criado agora
+    # Se admin foi criado agora, mostrar mensagem
     if admin_criado:
-        st.sidebar.info("Usuário padrão criado: admin / admin123")
-
+        st.success("✅ Usuário admin padrão criado: 'admin' com senha 'sucodepao'")
+    
     # Inicializar estado da sessão
     if 'usuario' not in st.session_state:
         st.session_state.usuario = None
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
     
-    # Verificar se já está logado
+    # Se já está logado
     if st.session_state.usuario:
-        usuario_logado = st.session_state.usuario
-        perfil = st.session_state.perfil
-    else:
-        usuario_logado = login()
-
-    if usuario_logado:
-        perfil = st.session_state.perfil
-
+        st.sidebar.success(f"👋 Olá, {st.session_state.usuario}!")
+        
         menu = ["Chamados", "Dashboard"]
-
-        if perfil == "admin":
+        if st.session_state.perfil == "admin":
             menu.append("Usuários")
 
-        escolha = st.sidebar.selectbox("Menu", menu)
+        escolha = st.sidebar.selectbox("📋 Menu", menu)
+        
+        if escolha == "Chamados":
+            tela_chamados(st.session_state.usuario)
+        elif escolha == "Dashboard":
+            tela_dashboard()
+        elif escolha == "Usuários":
+            tela_cadastro_usuario()
         
         # Botão de logout
-        if st.sidebar.button("Logout"):
+        if st.sidebar.button("🚪 Logout"):
             st.session_state.usuario = None
             st.session_state.perfil = None
             st.rerun()
-
-        if escolha == "Chamados":
-            tela_chamados(usuario_logado)
-
-        elif escolha == "Dashboard":
-            tela_dashboard()
-
-        elif escolha == "Usuários":
-            tela_cadastro_usuario()
+            
+    else:
+        # Tela de login
+        usuario_logado = login()
+        
+        # Se fez login com sucesso, recarregar a página
+        if usuario_logado:
+            st.rerun()
 
 if __name__ == "__main__":
     main()
