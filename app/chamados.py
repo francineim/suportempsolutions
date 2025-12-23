@@ -1,10 +1,11 @@
-import streamlit as st
+import streamlit as st  # ADICIONE ESTA LINHA!
 from database import conectar
 
 
 def tela_chamados(usuario):
     st.subheader("Chamados")
-
+    
+    # Formulário para novo chamado
     with st.expander("➕ Novo chamado"):
         with st.form("form_novo_chamado", clear_on_submit=True):
             assunto = st.text_input("Assunto")
@@ -33,20 +34,10 @@ def tela_chamados(usuario):
                         conn.close()
                         
                         st.success(f"✅ Chamado #{chamado_id} aberto com sucesso!")
-                        
-                        # Verificar se foi salvo
-                        conn2 = conectar()
-                        cursor2 = conn2.cursor()
-                        cursor2.execute("SELECT COUNT(*) as total FROM chamados WHERE id = ?", (chamado_id,))
-                        resultado = cursor2.fetchone()
-                        conn2.close()
-                        
-                        st.info(f"🔍 Verificação: Chamado salvo no banco: {'✅ SIM' if resultado['total'] > 0 else '❌ NÃO'}")
+                        st.rerun()  # Atualiza a página para mostrar o novo chamado
                         
                     except Exception as e:
                         st.error(f"❌ Erro ao abrir chamado: {str(e)}")
-                        import traceback
-                        st.code(traceback.format_exc())
                 else:
                     st.error("⚠️ Por favor, preencha o assunto e a descrição")
 
@@ -72,12 +63,16 @@ def tela_chamados(usuario):
             st.info("📭 Você ainda não tem chamados abertos")
         else:
             st.write(f"📊 Total de chamados: {len(chamados)}")
+            
+            # Criar uma tabela visual
             for ch in chamados:
-                with st.expander(f"#{ch['id']} - {ch['assunto']}"):
-                    st.write(f"📌 Prioridade: {ch['prioridade']}")
-                    st.write(f"📍 Status: {ch['status']}")
-                    st.write(f"📅 Abertura: {ch['data_abertura']}")
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.write(f"**#{ch['id']}** - {ch['assunto']}")
+                    st.write(f"📌 Prioridade: {ch['prioridade']} | 📍 Status: {ch['status']}")
+                with col2:
+                    st.write(f"📅 {ch['data_abertura']}")
+                st.divider()
+                
     except Exception as e:
         st.error(f"❌ Erro ao carregar chamados: {str(e)}")
-        import traceback
-        st.code(traceback.format_exc())
