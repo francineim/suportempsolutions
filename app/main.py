@@ -11,9 +11,13 @@ st.set_page_config(
 )
 
 def main():
-    # Criar tabelas e usuário admin padrão
-    criar_tabelas()
+    # Criar tabelas e verificar se admin foi criado
+    admin_criado = criar_tabelas()
     
+    # Mostrar mensagem se o admin foi criado agora
+    if admin_criado:
+        st.sidebar.info("Usuário padrão criado: admin / admin123")
+
     # Inicializar estado da sessão
     if 'usuario' not in st.session_state:
         st.session_state.usuario = None
