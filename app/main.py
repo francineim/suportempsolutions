@@ -11,9 +11,21 @@ st.set_page_config(
 )
 
 def main():
+    # Criar tabelas e usuário admin padrão
     criar_tabelas()
-
-    usuario_logado = login()
+    
+    # Inicializar estado da sessão
+    if 'usuario' not in st.session_state:
+        st.session_state.usuario = None
+    if 'perfil' not in st.session_state:
+        st.session_state.perfil = None
+    
+    # Verificar se já está logado
+    if st.session_state.usuario:
+        usuario_logado = st.session_state.usuario
+        perfil = st.session_state.perfil
+    else:
+        usuario_logado = login()
 
     if usuario_logado:
         perfil = st.session_state.perfil
@@ -24,6 +36,12 @@ def main():
             menu.append("Usuários")
 
         escolha = st.sidebar.selectbox("Menu", menu)
+        
+        # Botão de logout
+        if st.sidebar.button("Logout"):
+            st.session_state.usuario = None
+            st.session_state.perfil = None
+            st.rerun()
 
         if escolha == "Chamados":
             tela_chamados(usuario_logado)
