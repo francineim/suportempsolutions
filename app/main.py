@@ -1,11 +1,5 @@
 import streamlit as st
-import sys
-import os
-
-# Adicionar o diretório atual ao path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from database import criar_banco_se_nao_existir, verificar_estrutura
+from database import verificar_banco
 from auth import login, tela_cadastro_usuario
 from chamados import tela_chamados
 from dashboard import tela_dashboard
@@ -26,37 +20,20 @@ def main():
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
     
-    # Sidebar - Menu de sistema
-    with st.sidebar:
-        st.header("⚙️ Sistema")
-        
-        # Botão de emergência para reset
-        if st.button("🆘 Resetar Banco (Emergência)", type="secondary"):
-            st.session_state.show_reset = True
-        
-        if st.session_state.get('show_reset', False):
-            st.warning("Deseja realmente resetar o banco?")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("✅ Sim, resetar"):
-                    # Importar e executar reset
-                    from reset_db import resetar_banco_completo
-                    resetar_banco_completo()
-                    st.session_state.show_reset = False
-                    st.rerun()
-            with col2:
-                if st.button("❌ Cancelar"):
-                    st.session_state.show_reset = False
-                    st.rerun()
+    # Verificar banco
+    status = verificar_banco()
     
-    # Criar banco se não existir
-    criar_banco_se_nao_existir()
-    
-    # Verificar estrutura
-    estrutura = verificar_estrutura()
-    if estrutura["status"] == "error":
-        st.error(f"⚠️ Problema no banco: {estrutura['message']}")
-        st.info("Use o botão 'Resetar Banco' na sidebar para corrigir")
+    # Se banco tem problemas, mostrar alerta
+    if status["status"] == "error":
+        st.error("""
+        ⚠️ **Problema no banco de dados!**
+        
+        A estrutura do banco está incorreta. Clique no botão abaixo para corrigir automaticamente.
+        """)
+        
+        if st.button("🔧 Corrigir Banco de Dados Automaticamente", type="primary"):
+            # Redirecionar para página de correção
+            st.switch_page("app/force_fix.py")
     
     # Se já está logado
     if st.session_state.usuario:
