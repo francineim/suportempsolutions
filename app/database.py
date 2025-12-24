@@ -18,16 +18,41 @@ def criar_tabelas():
     cursor = conn.cursor()
     
     try:
-        # Tabela de usuários
+        # Tabela de usuários COMPLETA
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 usuario TEXT UNIQUE NOT NULL,
                 senha TEXT NOT NULL,
                 perfil TEXT NOT NULL,
-                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                nome_completo TEXT,
+                empresa TEXT,
+                email TEXT UNIQUE,
+                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ativo INTEGER DEFAULT 1
             )
         """)
+        
+        # Adicionar colunas novas se não existirem
+        try:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN nome_completo TEXT")
+        except:
+            pass  # Coluna já existe
+            
+        try:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN empresa TEXT")
+        except:
+            pass  # Coluna já existe
+            
+        try:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN email TEXT")
+        except:
+            pass  # Coluna já existe
+            
+        try:
+            cursor.execute("ALTER TABLE usuarios ADD COLUMN ativo INTEGER DEFAULT 1")
+        except:
+            pass  # Coluna já existe
         
         # Tabela de chamados
         cursor.execute("""
@@ -61,8 +86,8 @@ def criar_tabelas():
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
         if cursor.fetchone()[0] == 0:
             cursor.execute(
-                "INSERT INTO usuarios (usuario, senha, perfil) VALUES (?, ?, ?)",
-                ("admin", "sucodepao", "admin")
+                "INSERT INTO usuarios (usuario, senha, perfil, nome_completo, empresa, email) VALUES (?, ?, ?, ?, ?, ?)",
+                ("admin", "sucodepao", "admin", "Administrador do Sistema", "MP Solutions", "admin@mpsolutions.com.br")
             )
         
         conn.commit()
@@ -75,6 +100,102 @@ def criar_tabelas():
     finally:
         conn.close()
 
+# ========== FUNÇÕES PARA USUÁRIOS ==========
+def cadastrar_usuario_completo(usuario, senha, perfil, nome_completo, empresa, email):
+    """Cadastra um usuário com todos os dados."""
+    conn = conectar()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT INTO usuarios (usuario, senha, perfil, nome_completo, empresa, email)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (usuario, senha, perfil, nome_completo, empresa, email))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao cadastrar usuário: {e}")
+        return False
+    finally:
+        conn.close()
+
+def listar_usuarios():
+    """Lista todos os usuários cadastrados."""
+    conn = conectar()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, usuario, perfil, nome_completo, empresa, email, 
+                   data_cadastro, ativo
+            FROM usuarios
+            ORDER BY usuario
+        """)
+        return cursor.fetchall()
+    finally:
+        conn.close()
+
+def excluir_usuario(usuario_id):
+    """Exclui um usuário pelo ID."""
+    conn = conectar()
+    cursor = conn.cursor()
+    
+    try:
+        # Não permitir excluir o admin
+        cursor.execute("SELECT usuario FROM usuarios WHERE id = ?", (usuario_id,))
+        user = cursor.fetchone()
+        
+        if user and user["usuario"] == "admin":
+            return False, "Não é possível excluir o usuário administrador"
+        
+        cursor.execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
+        conn.commit()
+        return True, "Usuário excluído com sucesso"
+    except Exception as e:
+        conn.rollback()
+        return False, f"Erro ao excluir usuário: {e}"
+    finally:
+        conn.close()
+
+def buscar_usuario_por_id(usuario_id):
+    """Busca um usuário pelo ID."""
+    conn = conectar()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT id, usuario, perfil, nome_completo, empresa, email, ativo
+            FROM usuarios WHERE id = ?
+        """, (usuario_id,))
+        return cursor.fetchone()
+    finally:
+        conn.close()
+
+def atualizar_usuario(usuario_id, dados):
+    """Atualiza os dados de um usuário."""
+    conn = conectar()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            UPDATE usuarios 
+            SET nome_completo = ?, empresa = ?, email = ?, perfil = ?
+            WHERE id = ?
+        """, (dados['nome_completo'], dados['empresa'], dados['email'], 
+              dados['perfil'], usuario_id))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        print(f"Erro ao atualizar usuário: {e}")
+        return False
+    finally:
+        conn.close()
+
+# ========== FUNÇÕES PARA CHAMADOS ==========
 def buscar_chamados(usuario=None, perfil=None):
     """Busca chamados baseado no perfil."""
     conn = conectar()
