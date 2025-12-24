@@ -22,11 +22,10 @@ def main():
     # Se já está logado
     if st.session_state.usuario:
         perfil = st.session_state.perfil
-        usuario_logado = st.session_state.usuario
         
         menu = ["Chamados", "Dashboard"]
         if perfil == "admin":
-            menu.append("Usuários")
+            menu.append("👥 Usuários")  # Adicionado emoji para identificação
         
         escolha = st.sidebar.selectbox("Menu", menu)
         
@@ -34,8 +33,8 @@ def main():
             tela_chamados(usuario_logado, perfil)
         elif escolha == "Dashboard":
             tela_dashboard()
-        elif escolha == "Usuários":
-            tela_cadastro_usuario()
+        elif escolha == "👥 Usuários":
+            tela_cadastro_usuario()  # Esta função agora tem abas
         
         # Botão de logout
         if st.sidebar.button("Logout"):
