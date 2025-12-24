@@ -1,15 +1,19 @@
-# main.py (na raiz do projeto)
+# app/main.py
 import streamlit as st
 import sys
 import os
 
-# Adicionar pasta app ao path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+# Adicionar pasta raiz ao path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, current_dir)
+sys.path.insert(0, parent_dir)
 
-from app.database import criar_tabelas
-from app.auth import login, tela_cadastro_usuario
-from app.chamados import tela_chamados
-from app.dashboard import tela_dashboard
+# Imports corrigidos para funcionar no Streamlit Cloud
+from database import criar_tabelas
+from auth import login, tela_cadastro_usuario
+from chamados import tela_chamados
+from dashboard import tela_dashboard
 import time
 
 # Configuração da página
