@@ -44,7 +44,7 @@ def tela_cadastro_usuario():
     """Tela completa de gerenciamento de usuários."""
     st.title("👥 Gerenciamento de Usuários")
     
-    tab1, tab2, tab3 = st.tabs(["📝 Cadastrar Novo", "📋 Listar Usuários", "⚙️ Editar/Excluir"])
+    tab1, tab2 = st.tabs(["📝 Cadastrar Novo", "📋 Listar Usuários"])
     
     # ========== TAB 1: CADASTRAR NOVO USUÁRIO ==========
     with tab1:
@@ -101,22 +101,6 @@ def tela_cadastro_usuario():
             if not usuarios:
                 st.info("📭 Nenhum usuário cadastrado")
             else:
-                # Filtros
-                col_f1, col_f2 = st.columns(2)
-                with col_f1:
-                    filtrar_perfil = st.selectbox("Filtrar por perfil", ["Todos", "admin", "suporte", "cliente"])
-                with col_f2:
-                    mostrar_inativos = st.checkbox("Mostrar usuários inativos")
-                
-                # Aplicar filtros
-                usuarios_filtrados = []
-                for user in usuarios:
-                    if filtrar_perfil != "Todos" and user["perfil"] != filtrar_perfil:
-                        continue
-                    if not mostrar_inativos and user["ativo"] == 0:
-                        continue
-                    usuarios_filtrados.append(user)
-                
                 # Mostrar contadores
                 col_c1, col_c2, col_c3 = st.columns(3)
                 col_c1.metric("Total", len(usuarios))
@@ -126,7 +110,7 @@ def tela_cadastro_usuario():
                 # Tabela de usuários
                 st.divider()
                 
-                for user in usuarios_filtrados:
+                for user in usuarios:
                     with st.expander(f"👤 {user['usuario']} - {user['nome_completo']}"):
                         col_u1, col_u2 = st.columns(2)
                         
@@ -144,91 +128,3 @@ def tela_cadastro_usuario():
         
         except Exception as e:
             st.error(f"❌ Erro ao carregar usuários: {str(e)}")
-    
-    # ========== TAB 3: EDITAR/EXCLUIR ==========
-    with tab3:
-        st.subheader("⚙️ Editar ou Excluir Usuário")
-        
-        try:
-            usuarios = listar_usuarios()
-            
-            if not usuarios:
-                st.info("📭 Nenhum usuário para editar")
-            else:
-                # Seletor de usuário
-                usuarios_opcoes = {f"{u['id']} - {u['usuario']} ({u['nome_completo']})": u['id'] for u in usuarios}
-                usuario_selecionado = st.selectbox(
-                    "Selecione um usuário para editar:",
-                    options=list(usuarios_opcoes.keys())
-                )
-                
-                if usuario_selecionado:
-                    usuario_id = usuarios_opcoes[usuario_selecionado]
-                    usuario_dados = buscar_usuario_por_id(usuario_id)
-                    
-                    if usuario_dados:
-                        st.divider()
-                        
-                        # Formulário de edição
-                        with st.form(f"form_editar_{usuario_id}"):
-                            st.write(f"**Editando usuário ID:** {usuario_id}")
-                            
-                            col_e1, col_e2 = st.columns(2)
-                            
-                            with col_e1:
-                                editar_nome = st.text_input("Nome Completo", value=usuario_dados["nome_completo"] or "")
-                                editar_empresa = st.text_input("Empresa", value=usuario_dados["empresa"] or "")
-                            
-                            with col_e2:
-                                editar_email = st.text_input("E-mail", value=usuario_dados["email"] or "")
-                                editar_perfil = st.selectbox(
-                                    "Perfil", 
-                                    ["admin", "suporte", "cliente"],
-                                    index=["admin", "suporte", "cliente"].index(usuario_dados["perfil"])
-                                )
-                            
-                            col_btn1, col_btn2 = st.columns(2)
-                            
-                            with col_btn1:
-                                salvar_edicao = st.form_submit_button("💾 Salvar Alterações", type="primary")
-                            
-                            with col_btn2:
-                                excluir_usuario_btn = st.form_submit_button("🗑️ Excluir Usuário", type="secondary")
-                            
-                            if salvar_edicao:
-                                if not editar_nome or not editar_email:
-                                    st.error("Nome e e-mail são obrigatórios")
-                                else:
-                                    dados_atualizados = {
-                                        'nome_completo': editar_nome,
-                                        'empresa': editar_empresa,
-                                        'email': editar_email,
-                                        'perfil': editar_perfil
-                                    }
-                                    
-                                    if atualizar_usuario(usuario_id, dados_atualizados):
-                                        st.success("✅ Usuário atualizado com sucesso!")
-                                        st.rerun()
-                                    else:
-                                        st.error("❌ Erro ao atualizar usuário")
-                            
-                            if excluir_usuario_btn:
-                                # Confirmação de exclusão
-                                st.warning("⚠️ Tem certeza que deseja excluir este usuário?")
-                                confirm_col1, confirm_col2 = st.columns(2)
-                                
-                                with confirm_col1:
-                                    if st.button("✅ Sim, excluir", key=f"confirm_del_{usuario_id}"):
-                                        sucesso, mensagem = excluir_usuario(usuario_id)
-                                        if sucesso:
-                                            st.success(f"✅ {mensagem}")
-                                            st.rerun()
-                                        else:
-                                            st.error(f"❌ {mensagem}")
-                                
-                                with confirm_col2:
-                                    if st.button("❌ Cancelar", key=f"cancel_del_{usuario_id}"):
-                                        st.info("Exclusão cancelada")
-        
-        except Exception as e:
-            st.error(f"❌ Erro: {str(e)}")
