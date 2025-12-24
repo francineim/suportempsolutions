@@ -10,29 +10,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# DEBUG: Verificar se estamos recarregando
+if 'debug_counter' not in st.session_state:
+    st.session_state.debug_counter = 0
+st.session_state.debug_counter += 1
+
 def main():
-    # Inicializar variáveis de sessão se não existirem
-    if 'usuario' not in st.session_state:
-        st.session_state.usuario = None
-    if 'perfil' not in st.session_state:
-        st.session_state.perfil = None
+    # Mostrar debug info
+    st.sidebar.write(f"🔄 Recarga #{st.session_state.debug_counter}")
+    st.sidebar.write(f"📊 Sessão: usuario={st.session_state.get('usuario', 'NONE')}")
+    st.sidebar.write(f"📊 Sessão: perfil={st.session_state.get('perfil', 'NONE')}")
     
-    # Criar tabelas (isso deve ser feito apenas uma vez, mas não faz mal se for chamado várias vezes)
+    # Criar tabelas
     criar_tabelas()
     
-    # Se o usuário já está logado, mostrar o sistema
-    if st.session_state.usuario:
+    # Se já tem usuário na sessão, usar ele
+    if st.session_state.get('usuario'):
         perfil = st.session_state.perfil
         usuario_logado = st.session_state.usuario
         
-        # Menu na sidebar
+        st.sidebar.success(f"✅ Sessão ativa: {usuario_logado}")
+        
         menu = ["Chamados", "Dashboard"]
         if perfil == "admin":
             menu.append("Usuários")
         
         escolha = st.sidebar.selectbox("Menu", menu)
         
-        # Exibir a tela escolhida
         if escolha == "Chamados":
             tela_chamados(usuario_logado, perfil)
         elif escolha == "Dashboard":
@@ -41,21 +45,20 @@ def main():
             tela_cadastro_usuario()
         
         # Botão de logout
-        st.sidebar.markdown("---")
-        if st.sidebar.button("🚪 Logout"):
-            st.session_state.usuario = None
-            st.session_state.perfil = None
-            st.rerun()
+        if st.sidebar.button("Logout"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
     
     else:
-        # Se não está logado, mostrar a tela de login
+        # Tentar login
+        st.sidebar.warning("⚠️ Nenhuma sessão ativa")
         usuario_logado = login()
         
-        # Se o login foi bem-sucedido, atualizar a sessão e recarregar
+        # Se login OK, salvar na sessão
         if usuario_logado:
             st.session_state.usuario = usuario_logado
             st.session_state.perfil = st.session_state.get('perfil', 'cliente')
-            st.rerun()
+            st.experimental_rerun()
 
 if __name__ == "__main__":
     main()
