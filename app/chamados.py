@@ -1,5 +1,17 @@
 import streamlit as st
-from database import conectar, buscar_chamados, buscar_descricao_chamado, salvar_anexo, buscar_anexos
+from database import (
+    conectar, 
+    buscar_chamados,
+    buscar_descricao_chamado,
+    iniciar_atendimento,
+    pausar_atendimento,
+    retomar_atendimento,
+    concluir_atendimento_admin,
+    cliente_concluir_chamado,
+    obter_tempo_atendimento,
+    salvar_anexo,
+    buscar_anexos
+)
 import os
 import uuid
 
@@ -82,13 +94,65 @@ def tela_chamados(usuario, perfil):
             st.write(f"📊 Total: {len(chamados)}")
             
             for ch in chamados:
-                with st.expander(f"#{ch['id']} - {ch['assunto']}"):
-                    st.write(f"📌 Prioridade: {ch['prioridade']}")
-                    st.write(f"📍 Status: {ch['status']}")
-                    st.write(f"👤 Usuário: {ch['usuario']}")
-                    st.write(f"📅 Abertura: {ch['data_abertura']}")
+                with st.expander(f"#{ch['id']} - {ch['assunto']} - Status: {ch['status']}"):
+                    col1, col2 = st.columns(2)
                     
-                    # Descrição
+                    with col1:
+                        st.write(f"📌 Prioridade: {ch['prioridade']}")
+                        st.write(f"📍 Status: {ch['status']}")
+                        st.write(f"👤 Usuário: {ch['usuario']}")
+                        st.write(f"📅 Abertura: {ch['data_abertura']}")
+                        
+                        if ch['atendente']:
+                            st.write(f"👨‍💼 Atendente: {ch['atendente']}")
+                    
+                    with col2:
+                        # BOTÕES DE AÇÃO
+                        
+                        # 1. ADMIN: Iniciar atendimento (para chamados Novos)
+                        if perfil == "admin" and ch['status'] == "Novo":
+                            if st.button(f"👨‍💼 Iniciar Atendimento", key=f"iniciar_{ch['id']}"):
+                                if iniciar_atendimento(ch['id'], usuario):
+                                    st.success(f"Atendimento iniciado para chamado #{ch['id']}")
+                                    st.rerun()
+                        
+                        # 2. ADMIN: Controles de atendimento (para chamados Em atendimento)
+                        if perfil == "admin" and ch['status'] == "Em atendimento":
+                            # Verificar se é o atendente atual
+                            if ch['atendente'] == usuario:
+                                col_btn1, col_btn2, col_btn3 = st.columns(3)
+                                
+                                with col_btn1:
+                                    if st.button(f"⏸️ Pausar", key=f"pausar_{ch['id']}"):
+                                        if pausar_atendimento(ch['id']):
+                                            st.success(f"Atendimento pausado para chamado #{ch['id']}")
+                                            st.rerun()
+                                
+                                with col_btn2:
+                                    if st.button(f"▶️ Retomar", key=f"retomar_{ch['id']}"):
+                                        if retomar_atendimento(ch['id']):
+                                            st.success(f"Atendimento retomado para chamado #{ch['id']}")
+                                            st.rerun()
+                                
+                                with col_btn3:
+                                    if st.button(f"✅ Concluir Atendimento", key=f"concluir_admin_{ch['id']}"):
+                                        if concluir_atendimento_admin(ch['id']):
+                                            st.success(f"Atendimento concluído para chamado #{ch['id']}")
+                                            st.rerun()
+                        
+                        # 3. CLIENTE: Concluir chamado (apenas para seus chamados em atendimento)
+                        if perfil != "admin" and ch['status'] == "Em atendimento" and ch['usuario'] == usuario:
+                            if st.button(f"✅ Concluir Chamado", key=f"concluir_cliente_{ch['id']}"):
+                                if cliente_concluir_chamado(ch['id']):
+                                    st.success(f"Chamado #{ch['id']} concluído!")
+                                    st.rerun()
+                    
+                    # Mostrar tempo de atendimento se aplicável
+                    if ch['status'] == "Em atendimento":
+                        tempo = obter_tempo_atendimento(ch['id'])
+                        st.info(f"⏱️ **Tempo de atendimento:** {tempo}")
+                    
+                    # Descrição do chamado
                     st.divider()
                     st.write("**Descrição:**")
                     descricao_completa = buscar_descricao_chamado(ch['id'])
