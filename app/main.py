@@ -6,30 +6,23 @@ from dashboard import tela_dashboard
 
 st.set_page_config(
     page_title="Helpdesk MP Solutions",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# DEBUG: Verificar se estamos recarregando
-if 'debug_counter' not in st.session_state:
-    st.session_state.debug_counter = 0
-st.session_state.debug_counter += 1
-
 def main():
-    # Mostrar debug info
-    st.sidebar.write(f"🔄 Recarga #{st.session_state.debug_counter}")
-    st.sidebar.write(f"📊 Sessão: usuario={st.session_state.get('usuario', 'NONE')}")
-    st.sidebar.write(f"📊 Sessão: perfil={st.session_state.get('perfil', 'NONE')}")
-    
     # Criar tabelas
     criar_tabelas()
     
-    # Se já tem usuário na sessão, usar ele
-    if st.session_state.get('usuario'):
+    # Inicializar sessão
+    if 'usuario' not in st.session_state:
+        st.session_state.usuario = None
+    if 'perfil' not in st.session_state:
+        st.session_state.perfil = None
+    
+    # Se já está logado
+    if st.session_state.usuario:
         perfil = st.session_state.perfil
         usuario_logado = st.session_state.usuario
-        
-        st.sidebar.success(f"✅ Sessão ativa: {usuario_logado}")
         
         menu = ["Chamados", "Dashboard"]
         if perfil == "admin":
@@ -46,19 +39,19 @@ def main():
         
         # Botão de logout
         if st.sidebar.button("Logout"):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
+            st.session_state.usuario = None
+            st.session_state.perfil = None
+            st.rerun()
     
     else:
         # Tentar login
-        st.sidebar.warning("⚠️ Nenhuma sessão ativa")
         usuario_logado = login()
         
-        # Se login OK, salvar na sessão
+        # Se login bem-sucedido
         if usuario_logado:
             st.session_state.usuario = usuario_logado
             st.session_state.perfil = st.session_state.get('perfil', 'cliente')
-            st.experimental_rerun()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
