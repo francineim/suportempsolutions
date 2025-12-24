@@ -1,0 +1,12 @@
+# streamlit_app.py (arquivo na RAIZ do projeto para Streamlit Cloud)
+import sys
+import os
+
+# Adicionar pasta app ao path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+
+# Importar e executar o main da pasta app
+from app.main import main
+
+if __name__ == "__main__":
+    main()
