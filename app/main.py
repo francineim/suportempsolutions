@@ -6,13 +6,11 @@ from dashboard import tela_dashboard
 
 st.set_page_config(
     page_title="Helpdesk MP Solutions",
-    layout="wide",
-    page_icon="🔧",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 def main():
-    # Criar tabelas (agora inclui tabela de anexos)
+    # Criar tabelas
     criar_tabelas()
     
     # Login
@@ -21,37 +19,25 @@ def main():
     if usuario_logado:
         perfil = st.session_state.perfil
         
-        # Sidebar com informações do usuário
-        st.sidebar.markdown(f"### 👤 {usuario_logado}")
-        st.sidebar.markdown(f"**Perfil:** {perfil}")
-        st.sidebar.markdown("---")
-        
-        menu = ["📋 Chamados", "📊 Dashboard"]
+        menu = ["Chamados", "Dashboard"]
         if perfil == "admin":
-            menu.append("👥 Usuários")
+            menu.append("Usuários")
         
         escolha = st.sidebar.selectbox("Menu", menu)
         
-        # PASSAR PERFIL PARA TELA_CHAMADOS
-        if escolha == "📋 Chamados":
-            tela_chamados(usuario_logado, perfil)  # ← AQUI: adicionado perfil
+        if escolha == "Chamados":
+            tela_chamados(usuario_logado, perfil)
         
-        elif escolha == "📊 Dashboard":
+        elif escolha == "Dashboard":
             tela_dashboard()
         
-        elif escolha == "👥 Usuários":
+        elif escolha == "Usuários":
             tela_cadastro_usuario()
         
-        # Botão de logout
-        st.sidebar.markdown("---")
-        if st.sidebar.button("🚪 Logout", type="secondary"):
+        # Logout
+        if st.sidebar.button("Logout"):
             st.session_state.clear()
             st.rerun()
-        
-        # Link para force_fix (apenas admin)
-        if perfil == "admin":
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("[🛠️ Ferramentas Admin](/force_fix)")
 
 if __name__ == "__main__":
     main()
