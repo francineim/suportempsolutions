@@ -6,53 +6,56 @@ from dashboard import tela_dashboard
 
 st.set_page_config(
     page_title="Helpdesk MP Solutions",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 def main():
-    # Criar tabelas
-    criar_tabelas()
-    
-    # Inicializar estado da sessão se não existir
+    # Inicializar variáveis de sessão se não existirem
     if 'usuario' not in st.session_state:
         st.session_state.usuario = None
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
     
-    # Se já está logado, usar a sessão
-    if st.session_state.usuario:
-        usuario_logado = st.session_state.usuario
-        perfil = st.session_state.perfil
-    else:
-        # Se não está logado, tentar fazer login
-        usuario_logado = login()
-        if usuario_logado:
-            perfil = st.session_state.perfil
-        else:
-            return  # Não está logado, para aqui
+    # Criar tabelas (isso deve ser feito apenas uma vez, mas não faz mal se for chamado várias vezes)
+    criar_tabelas()
     
-    # Agora, se usuario_logado não for None, mostrar o sistema
-    if usuario_logado:
+    # Se o usuário já está logado, mostrar o sistema
+    if st.session_state.usuario:
+        perfil = st.session_state.perfil
+        usuario_logado = st.session_state.usuario
+        
+        # Menu na sidebar
         menu = ["Chamados", "Dashboard"]
         if perfil == "admin":
             menu.append("Usuários")
         
         escolha = st.sidebar.selectbox("Menu", menu)
         
+        # Exibir a tela escolhida
         if escolha == "Chamados":
             tela_chamados(usuario_logado, perfil)
-        
         elif escolha == "Dashboard":
             tela_dashboard()
-        
         elif escolha == "Usuários":
             tela_cadastro_usuario()
         
-        # Logout
-        if st.sidebar.button("Logout"):
+        # Botão de logout
+        st.sidebar.markdown("---")
+        if st.sidebar.button("🚪 Logout"):
             st.session_state.usuario = None
             st.session_state.perfil = None
-            st.experimental_rerun()
+            st.rerun()
+    
+    else:
+        # Se não está logado, mostrar a tela de login
+        usuario_logado = login()
+        
+        # Se o login foi bem-sucedido, atualizar a sessão e recarregar
+        if usuario_logado:
+            st.session_state.usuario = usuario_logado
+            st.session_state.perfil = st.session_state.get('perfil', 'cliente')
+            st.rerun()
 
 if __name__ == "__main__":
     main()
