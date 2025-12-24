@@ -1,17 +1,22 @@
-def salvar_anexo(chamado_id, nome_arquivo, caminho_arquivo):
-    """Salva um anexo no banco de dados."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "INSERT INTO anexos (chamado_id, nome_arquivo, caminho_arquivo) VALUES (?, ?, ?)",
-            (chamado_id, nome_arquivo, caminho_arquivo)
-        )
-        
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"Erro ao salvar anexo: {e}")
-        return False
+# Adicione esta função no início do arquivo, após os imports
+def inicializar_pastas():
+    """Inicializa todas as pastas necessárias."""
+    pastas = ["data", "uploads"]
+    
+    for pasta in pastas:
+        if not os.path.exists(pasta):
+            os.makedirs(pasta)
+            print(f"📁 Pasta '{pasta}' criada")
+    
+    return True
+
+# Modifique a função conectar para garantir pastas:
+def conectar():
+    """Conecta ao banco de dados SQLite."""
+    # Garantir que as pastas existam
+    inicializar_pastas()
+    
+    conn = sqlite3.connect("data/database.db", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
