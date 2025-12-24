@@ -6,7 +6,8 @@ from dashboard import tela_dashboard
 
 st.set_page_config(
     page_title="Helpdesk MP Solutions",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 def main():
@@ -22,22 +23,24 @@ def main():
     # Se já está logado
     if st.session_state.usuario:
         perfil = st.session_state.perfil
+        usuario_logado = st.session_state.usuario  # ← CORREÇÃO AQUI
         
-        menu = ["Chamados", "Dashboard"]
+        menu = ["📋 Chamados", "📊 Dashboard"]
         if perfil == "admin":
-            menu.append("👥 Usuários")  # Adicionado emoji para identificação
+            menu.append("👥 Gerenciar Usuários")
         
         escolha = st.sidebar.selectbox("Menu", menu)
         
-        if escolha == "Chamados":
+        if escolha == "📋 Chamados":
             tela_chamados(usuario_logado, perfil)
-        elif escolha == "Dashboard":
+        elif escolha == "📊 Dashboard":
             tela_dashboard()
-        elif escolha == "👥 Usuários":
-            tela_cadastro_usuario()  # Esta função agora tem abas
+        elif escolha == "👥 Gerenciar Usuários":
+            tela_cadastro_usuario()
         
         # Botão de logout
-        if st.sidebar.button("Logout"):
+        st.sidebar.markdown("---")
+        if st.sidebar.button("🚪 Logout", type="secondary"):
             st.session_state.usuario = None
             st.session_state.perfil = None
             st.rerun()
