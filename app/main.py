@@ -1,10 +1,15 @@
-# app/main.py
+# main.py (na raiz do projeto)
 import streamlit as st
-from database import criar_tabelas
-from auth import login, tela_cadastro_usuario
-from chamados import tela_chamados
-from dashboard import tela_dashboard
-from utils import verificar_timeout_sessao, registrar_log
+import sys
+import os
+
+# Adicionar pasta app ao path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+
+from app.database import criar_tabelas
+from app.auth import login, tela_cadastro_usuario
+from app.chamados import tela_chamados
+from app.dashboard import tela_dashboard
 import time
 
 # Configuração da página
@@ -14,24 +19,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# CSS customizado
-st.markdown("""
-<style>
-    .stApp {
-        max-width: 100%;
-    }
-    .stButton>button {
-        width: 100%;
-    }
-    div[data-testid="stExpander"] {
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        margin-bottom: 10px;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 
 def main():
     """Função principal da aplicação."""
@@ -44,14 +31,9 @@ def main():
         st.session_state.usuario = None
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
-    if 'last_activity' not in st.session_state:
-        st.session_state.last_activity = time.time()
     
     # Se já está logado
     if st.session_state.usuario:
-        # Verificar timeout de sessão
-        verificar_timeout_sessao()
-        
         perfil = st.session_state.perfil
         usuario_logado = st.session_state.usuario
         
@@ -78,7 +60,7 @@ def main():
         if perfil == "admin":
             menu_opcoes["👥 Usuários"] = "usuarios"
         
-        # Seleção de menu com ícones
+        # Seleção de menu
         escolha = st.sidebar.radio(
             "**🧭 Navegação**",
             list(menu_opcoes.keys()),
@@ -87,22 +69,8 @@ def main():
         
         st.sidebar.markdown("---")
         
-        # Informações de sessão
-        with st.sidebar.expander("ℹ️ Informações da Sessão"):
-            tempo_ativo = int(time.time() - st.session_state.last_activity)
-            minutos_ativo = tempo_ativo // 60
-            st.write(f"**Tempo inativo:** {minutos_ativo} minuto(s)")
-            st.write(f"**Timeout em:** {30 - minutos_ativo} minuto(s)")
-            st.caption("Sessão expira após 30 minutos de inatividade")
-        
         # Botão de logout
         if st.sidebar.button("🚪 Sair", type="secondary", use_container_width=True):
-            usuario_temp = st.session_state.usuario
-            
-            # Registrar logout
-            registrar_log("LOGOUT", usuario_temp, "Logout realizado")
-            
-            # Limpar sessão
             st.session_state.clear()
             st.success("👋 Logout realizado com sucesso!")
             time.sleep(1)
@@ -113,14 +81,7 @@ def main():
         st.sidebar.caption("MP Solutions © 2024")
         
         # ========== CONTEÚDO PRINCIPAL ==========
-        
-        # Cabeçalho
-        col_h1, col_h2 = st.columns([3, 1])
-        with col_h1:
-            st.title("🎫 Sistema Helpdesk - MP Solutions")
-        with col_h2:
-            st.write("")  # Espaçamento
-        
+        st.title("🎫 Sistema Helpdesk - MP Solutions")
         st.markdown("---")
         
         # Renderizar página selecionada
@@ -128,17 +89,13 @@ def main():
         
         if pagina == "chamados":
             tela_chamados(usuario_logado, perfil)
-        
         elif pagina == "dashboard":
             tela_dashboard()
-        
         elif pagina == "usuarios":
             tela_cadastro_usuario()
     
     else:
         # ========== TELA DE LOGIN ==========
-        
-        # Cabeçalho de boas-vindas
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
@@ -152,18 +109,8 @@ def main():
             
             st.markdown("---")
             
-            # Card informativo
             st.info("""
             **👋 Bem-vindo ao Sistema Helpdesk!**
-            
-            Sistema completo de gerenciamento de chamados de suporte técnico.
-            
-            **✨ Funcionalidades:**
-            - 📋 Abertura e acompanhamento de chamados
-            - ⏱️ Controle de tempo de atendimento
-            - 📊 Dashboard com estatísticas
-            - 📎 Upload de anexos
-            - 👥 Gerenciamento de usuários (admin)
             
             **🔐 Credenciais Padrão:**
             - **Usuário:** admin
@@ -176,15 +123,6 @@ def main():
         # Se login bem-sucedido, recarregar
         if usuario_logado:
             st.rerun()
-        
-        # Rodapé
-        st.markdown("---")
-        st.markdown("""
-        <div style='text-align: center; color: #666; padding: 20px 0;'>
-            <p>🔒 Todos os dados são criptografados e protegidos</p>
-            <p>MP Solutions © 2024 - Todos os direitos reservados</p>
-        </div>
-        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
