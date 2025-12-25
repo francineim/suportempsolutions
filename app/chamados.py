@@ -203,12 +203,72 @@ def tela_chamados(usuario, perfil):
                             
                             # Botão de concluir
                             if st.button(f"✅ Concluir", key=f"concluir_admin_{ch['id']}", type="primary"):
-                                sucesso, mensagem = concluir_atendimento_admin(ch['id'])
-                                if sucesso:
-                                    st.success(mensagem)
-                                    st.rerun()
-                                else:
-                                    st.error(mensagem)
+                                # Mostrar formulário de conclusão em dialog
+                                st.session_state[f'mostrar_conclusao_{ch["id"]}'] = True
+                            
+                            # Formulário de conclusão
+                            if st.session_state.get(f'mostrar_conclusao_{ch["id"]}', False):
+                                with st.form(key=f"form_conclusao_{ch['id']}"):
+                                    st.write("**📝 Mensagem de Conclusão**")
+                                    mensagem = st.text_area(
+                                        "Mensagem para o cliente",
+                                        height=150,
+                                        placeholder="Descreva o que foi feito, orientações ao cliente, etc."
+                                    )
+                                    
+                                    arquivos_upload = st.file_uploader(
+                                        "Anexar arquivos (opcional)",
+                                        accept_multiple_files=True,
+                                        key=f"upload_conclusao_{ch['id']}"
+                                    )
+                                    
+                                    col_btn1, col_btn2 = st.columns(2)
+                                    
+                                    with col_btn1:
+                                        enviar = st.form_submit_button("✅ Concluir com Mensagem", type="primary")
+                                    
+                                    with col_btn2:
+                                        cancelar = st.form_submit_button("❌ Cancelar")
+                                    
+                                    if enviar:
+                                        arquivos_salvos = []
+                                        
+                                        # Processar arquivos
+                                        if arquivos_upload:
+                                            if not os.path.exists("uploads/conclusoes"):
+                                                os.makedirs("uploads/conclusoes")
+                                            
+                                            for arq in arquivos_upload:
+                                                valido, msg = validar_arquivo(arq)
+                                                if valido:
+                                                    nome_seguro = gerar_nome_arquivo_seguro(arq.name)
+                                                    caminho = os.path.join("uploads/conclusoes", nome_seguro)
+                                                    
+                                                    with open(caminho, "wb") as f:
+                                                        f.write(arq.getbuffer())
+                                                    
+                                                    arquivos_salvos.append({
+                                                        'nome': arq.name,
+                                                        'caminho': caminho
+                                                    })
+                                        
+                                        # Concluir com mensagem
+                                        sucesso, msg_resultado = concluir_atendimento_admin(
+                                            ch['id'], 
+                                            mensagem if mensagem else None,
+                                            arquivos_salvos if arquivos_salvos else None
+                                        )
+                                        
+                                        if sucesso:
+                                            st.success(msg_resultado)
+                                            del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                            st.rerun()
+                                        else:
+                                            st.error(msg_resultado)
+                                    
+                                    if cancelar:
+                                        del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                        st.rerun()
                         
                         # ========== CLIENTE: Concluir chamado ==========
                         if perfil != "admin" and ch['usuario'] == usuario and ch['status'] == "Em atendimento":
@@ -225,6 +285,26 @@ def tela_chamados(usuario, perfil):
                     st.write("**📋 Descrição:**")
                     descricao_completa = buscar_descricao_chamado(ch['id'])
                     st.text_area("", value=descricao_completa, height=100, disabled=True, key=f"desc_{ch['id']}")
+                    
+                    # Mensagem de conclusão (se existir)
+                    if ch['status'] == 'Concluído':
+                        from database import buscar_mensagem_conclusao
+                        msg_conclusao = buscar_mensagem_conclusao(ch['id'])
+                        
+                        if msg_conclusao:
+                            st.divider()
+                            st.write("**✅ Mensagem de Conclusão:**")
+                            
+                            with st.container():
+                                st.info(f"**Atendente:** {msg_conclusao['atendente']}")
+                                st.write(msg_conclusao['mensagem'])
+                                st.caption(f"Enviado em: {formatar_data_br(msg_conclusao['data_envio'])}")
+                                
+                                if msg_conclusao.get('arquivos'):
+                                    st.write("**📎 Arquivos anexados:**")
+                                    for arq in msg_conclusao['arquivos'].split(','):
+                                        if arq:
+                                            st.write(f"📄 {arq}")
                     
                     # Anexos
                     st.divider()
