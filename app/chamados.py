@@ -171,11 +171,13 @@ def tela_chamados(usuario, perfil):
                             # Se está em andamento, somar tempo desde última retomada
                             if ch.get('status_atendimento') == "em_andamento" and ch.get('ultima_retomada'):
                                 try:
-                                    ultima_retomada = datetime.strptime(ch['ultima_retomada'], "%Y-%m-%d %H:%M:%S")
+                                    # Remover microsegundos do timestamp
+                                    ultima_retomada_str = str(ch['ultima_retomada']).split('.')[0]
+                                    ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
                                     tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
                                     tempo_atual += tempo_decorrido
-                                except:
-                                    pass
+                                except Exception as e:
+                                    st.caption(f"Aviso: Erro no cálculo de tempo")
                             
                             # Exibir tempo com destaque
                             st.markdown(f"### ⏱️ {formatar_tempo(tempo_atual)}")
