@@ -1,4 +1,3 @@
-# app/main.py
 import streamlit as st
 import sys
 import os
@@ -9,39 +8,46 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, current_dir)
 sys.path.insert(0, parent_dir)
 
-# Imports corrigidos para funcionar no Streamlit Cloud
-from database import criar_tabelas
-from auth import login, tela_cadastro_usuario
-from chamados import tela_chamados
-from dashboard import tela_dashboard
-import time
-
 # Configuração da página
 st.set_page_config(
-    page_title="Helpdesk – MP Solutions",  # IMPLEMENTAÇÃO 6
+    page_title="Helpdesk – MP Solutions",
     page_icon="🎫",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Imports do sistema
+from database import criar_tabelas
+from auth import login, tela_cadastro_usuario
+from chamados import tela_chamados
+from dashboard import tela_dashboard
+from pages.force_fix import fix_database
+from email.email_service import testar_configuracao_email
+import time
+
 def main():
     """Função principal da aplicação."""
     
     # Criar tabelas no primeiro acesso
-    criar_tabelas()
+    try:
+        criar_tabelas()
+    except Exception as e:
+        st.error(f"Erro ao inicializar banco: {e}")
     
     # Inicializar variáveis de sessão
     if 'usuario' not in st.session_state:
         st.session_state.usuario = None
     if 'perfil' not in st.session_state:
         st.session_state.perfil = None
+    if 'teste_email' not in st.session_state:
+        st.session_state.teste_email = False
     
     # Se já está logado
     if st.session_state.usuario:
         perfil = st.session_state.perfil
         usuario_logado = st.session_state.usuario
         
-        # IMPLEMENTAÇÃO 4: Buscar empresa do usuário
+        # Buscar empresa do usuário
         from database import conectar
         conn = conectar()
         cursor = conn.cursor()
@@ -59,7 +65,7 @@ def main():
         
         # ========== SIDEBAR ==========
         st.sidebar.markdown("---")
-        st.sidebar.markdown(f"### 👤 {nome_exibicao}")  # IMPLEMENTAÇÃO 4
+        st.sidebar.markdown(f"### 👤 {nome_exibicao}")
         
         # Badge de perfil
         perfil_badges = {
@@ -77,10 +83,10 @@ def main():
             "📊 Dashboard": "dashboard"
         }
         
-        # IMPLEMENTAÇÃO 3: Usuários e Force Fix apenas para admin
         if perfil == "admin":
             menu_opcoes["👥 Usuários"] = "usuarios"
             menu_opcoes["🔧 Force Fix"] = "force_fix"
+            menu_opcoes["📧 Teste E-mail"] = "teste_email"
         
         # Seleção de menu
         escolha = st.sidebar.radio(
@@ -103,7 +109,7 @@ def main():
         st.sidebar.caption("MP Solutions © 2024")
         
         # ========== CONTEÚDO PRINCIPAL ==========
-        st.title("🎫 Helpdesk – MP Solutions")  # IMPLEMENTAÇÃO 6
+        st.title("🎫 Helpdesk – MP Solutions")
         st.markdown("---")
         
         # Renderizar página selecionada
@@ -116,12 +122,18 @@ def main():
         elif pagina == "usuarios":
             tela_cadastro_usuario()
         elif pagina == "force_fix":
-            # Importar force_fix
-            import sys
-            import os
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'pages'))
-            from pages.force_fix import fix_database
             fix_database()
+        elif pagina == "teste_email":
+            st.subheader("📧 Teste de Configuração de E-mail")
+            
+            if st.button("🔍 Testar Configuração de E-mail", type="primary"):
+                with st.spinner("Testando configuração..."):
+                    sucesso, mensagem = testar_configuracao_email()
+                    
+                    if sucesso:
+                        st.success(f"✅ {mensagem}")
+                    else:
+                        st.error(f"❌ {mensagem}")
     
     else:
         # ========== TELA DE LOGIN ==========
@@ -143,6 +155,10 @@ def main():
             **🔐 Credenciais Padrão:**
             - **Usuário:** admin
             - **Senha:** sucodepao
+            
+            **Outros usuários:**
+            - cliente1 / senha123
+            - suporte1 / senha123
             """)
         
         # Tentar login
