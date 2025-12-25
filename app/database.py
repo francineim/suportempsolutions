@@ -90,10 +90,26 @@ def criar_tabelas():
             )
         """)
         
+        # Tabela de interações (NOVA)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interacoes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chamado_id INTEGER NOT NULL,
+                autor TEXT NOT NULL,
+                mensagem TEXT NOT NULL,
+                tipo TEXT DEFAULT 'resposta',
+                data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                enviar_email INTEGER DEFAULT 1,
+                email_enviado INTEGER DEFAULT 0,
+                FOREIGN KEY (chamado_id) REFERENCES chamados(id) ON DELETE CASCADE
+            )
+        """)
+        
         # Índices
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_status ON chamados(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_usuario ON chamados(usuario)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_mensagens_chamado ON mensagens_conclusao(chamado_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_interacoes_chamado ON interacoes(chamado_id)")
         
         # Verificar se admin existe
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
