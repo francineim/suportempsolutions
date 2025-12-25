@@ -67,9 +67,33 @@ def criar_tabelas():
             )
         """)
         
+        # Tabela de mensagens de conclusão
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS mensagens_conclusao (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chamado_id INTEGER NOT NULL,
+                mensagem TEXT NOT NULL,
+                atendente TEXT NOT NULL,
+                data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (chamado_id) REFERENCES chamados(id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Tabela de anexos de conclusão
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS anexos_conclusao (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                mensagem_id INTEGER NOT NULL,
+                nome_arquivo TEXT NOT NULL,
+                caminho_arquivo TEXT NOT NULL,
+                FOREIGN KEY (mensagem_id) REFERENCES mensagens_conclusao(id) ON DELETE CASCADE
+            )
+        """)
+        
         # Índices
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_status ON chamados(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_usuario ON chamados(usuario)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mensagens_chamado ON mensagens_conclusao(chamado_id)")
         
         # Verificar se admin existe
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
