@@ -51,7 +51,8 @@ def criar_tabelas():
                 data_fim_atendimento TIMESTAMP,
                 tempo_atendimento_segundos INTEGER DEFAULT 0,
                 status_atendimento TEXT DEFAULT 'nao_iniciado',
-                ultima_retomada TIMESTAMP
+                ultima_retomada TIMESTAMP,
+                retornos INTEGER DEFAULT 0
             )
         """)
         
