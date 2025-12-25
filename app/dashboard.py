@@ -1,6 +1,12 @@
 # app/dashboard.py
 import streamlit as st
-from database import buscar_estatisticas_usuario, conectar, obter_tempo_atendimento
+from database import (
+    buscar_estatisticas_usuario, 
+    conectar, 
+    obter_tempo_atendimento,
+    buscar_estatisticas_por_empresa,
+    buscar_chamados_com_tempo
+)
 from utils import formatar_tempo
 
 def tela_dashboard():
@@ -15,10 +21,9 @@ def tela_dashboard():
     
     estatisticas = buscar_estatisticas_usuario(usuario, perfil)
     
-    if perfil == "admin":
-        st.info("👑 Vista de Administrador - Todos os chamados")
-    else:
-        st.info(f"👤 Vista de {usuario} - Seus chamados")
+    # IMPLEMENTAÇÃO 5: Texto simplificado
+    if perfil != "admin":
+        st.info("📊 Seus Chamados")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -39,42 +44,114 @@ def tela_dashboard():
         
         st.bar_chart(chart_data)
     
-    if perfil == "admin" and estatisticas["em_atendimento"] > 0:
+    # IMPLEMENTAÇÃO 2: Estatísticas avançadas para ADMIN
+    if perfil == "admin":
         st.markdown("---")
-        st.subheader("⏱️ Chamados em Atendimento")
         
-        if st.button("🔄 Atualizar Tempos"):
-            st.rerun()
+        # Abas para diferentes visualizações
+        tab1, tab2, tab3 = st.tabs(["📊 Por Empresa", "🎫 Por Chamado", "⏱️ Chamados em Andamento"])
         
-        try:
-            conn = conectar()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, assunto, usuario, atendente, status_atendimento
-                FROM chamados 
-                WHERE status = 'Em atendimento'
-                ORDER BY id DESC
-            """)
+        # TAB 1: Estatísticas por Empresa
+        with tab1:
+            st.subheader("📊 Estatísticas por Empresa")
             
-            chamados = cursor.fetchall()
-            conn.close()
+            empresas = buscar_estatisticas_por_empresa()
             
-            for ch in chamados:
-                tempo = obter_tempo_atendimento(ch['id'])
-                status_emoji = "⏸️" if ch['status_atendimento'] == "pausado" else "▶️"
+            if empresas:
+                for emp in empresas:
+                    with st.expander(f"🏢 {emp['empresa'] or 'Sem empresa'}"):
+                        col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+                        
+                        col_e1.metric("Total", emp['total_chamados'])
+                        col_e2.metric("Novos", emp['novos'])
+                        col_e3.metric("Em Atend.", emp['em_atendimento'])
+                        col_e4.metric("Concluídos", emp['concluidos'])
+                        
+                        if emp['tempo_medio']:
+                            st.write(f"**⏱️ Tempo Médio de Atendimento:** {formatar_tempo(int(emp['tempo_medio']))}")
+            else:
+                st.info("📭 Nenhuma estatística disponível")
+        
+        # TAB 2: Estatísticas por Chamado
+        with tab2:
+            st.subheader("🎫 Chamados Concluídos - Tempo de Atendimento")
+            
+            chamados = buscar_chamados_com_tempo()
+            
+            if chamados:
+                # Criar DataFrame
+                df_chamados = pd.DataFrame([
+                    {
+                        'ID': f"#{ch['id']}",
+                        'Assunto': ch['assunto'][:30] + '...' if len(ch['assunto']) > 30 else ch['assunto'],
+                        'Cliente': ch['usuario'],
+                        'Empresa': ch['empresa'] or 'N/A',
+                        'Atendente': ch['atendente'] or 'N/A',
+                        'Tempo': formatar_tempo(ch['tempo_atendimento_segundos']),
+                        'Abertura': ch['data_abertura'][:10] if ch['data_abertura'] else 'N/A'
+                    }
+                    for ch in chamados
+                ])
                 
-                col_a, col_b = st.columns([3, 1])
+                st.dataframe(df_chamados, use_container_width=True, hide_index=True)
                 
-                with col_a:
-                    st.write(f"{status_emoji} **#{ch['id']}** - {ch['assunto']}")
-                    st.caption(f"Cliente: {ch['usuario']} | Atendente: {ch['atendente']}")
-                
-                with col_b:
-                    if ch['status_atendimento'] == 'em_andamento':
-                        st.markdown(f"### {formatar_tempo(tempo)}")
-                    else:
-                        st.write(formatar_tempo(tempo))
-                
+                # Estatísticas gerais
                 st.divider()
-        except Exception as e:
-            st.error(f"Erro: {e}")
+                
+                col_s1, col_s2, col_s3 = st.columns(3)
+                
+                tempos = [ch['tempo_atendimento_segundos'] for ch in chamados]
+                tempo_medio = sum(tempos) / len(tempos) if tempos else 0
+                tempo_min = min(tempos) if tempos else 0
+                tempo_max = max(tempos) if tempos else 0
+                
+                col_s1.metric("⏱️ Tempo Médio", formatar_tempo(int(tempo_medio)))
+                col_s2.metric("🏃 Mais Rápido", formatar_tempo(tempo_min))
+                col_s3.metric("🐌 Mais Lento", formatar_tempo(tempo_max))
+            else:
+                st.info("📭 Nenhum chamado concluído ainda")
+        
+        # TAB 3: Chamados em Andamento (original)
+        with tab3:
+            st.subheader("⏱️ Chamados em Atendimento")
+            
+            if estatisticas["em_atendimento"] > 0:
+                if st.button("🔄 Atualizar Tempos"):
+                    st.rerun()
+                
+                try:
+                    conn = conectar()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        SELECT c.id, c.assunto, c.usuario, u.empresa, c.atendente, c.status_atendimento
+                        FROM chamados c
+                        LEFT JOIN usuarios u ON c.usuario = u.usuario
+                        WHERE c.status = 'Em atendimento'
+                        ORDER BY c.id DESC
+                    """)
+                    
+                    chamados = cursor.fetchall()
+                    conn.close()
+                    
+                    for ch in chamados:
+                        tempo = obter_tempo_atendimento(ch['id'])
+                        status_emoji = "⏸️" if ch['status_atendimento'] == "pausado" else "▶️"
+                        
+                        col_a, col_b = st.columns([3, 1])
+                        
+                        with col_a:
+                            st.write(f"{status_emoji} **#{ch['id']}** - {ch['assunto']}")
+                            empresa_txt = f" ({ch['empresa']})" if ch['empresa'] else ""
+                            st.caption(f"Cliente: {ch['usuario']}{empresa_txt} | Atendente: {ch['atendente']}")
+                        
+                        with col_b:
+                            if ch['status_atendimento'] == 'em_andamento':
+                                st.markdown(f"### {formatar_tempo(tempo)}")
+                            else:
+                                st.write(formatar_tempo(tempo))
+                        
+                        st.divider()
+                except Exception as e:
+                    st.error(f"Erro: {e}")
+            else:
+                st.info("📭 Nenhum chamado em atendimento")
