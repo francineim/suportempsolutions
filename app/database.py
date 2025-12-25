@@ -352,7 +352,9 @@ def pausar_atendimento(chamado_id):
         tempo_atual = dados['tempo_atendimento_segundos'] or 0
         
         if dados['ultima_retomada']:
-            ultima_retomada = datetime.strptime(dados['ultima_retomada'], "%Y-%m-%d %H:%M:%S")
+            # Remover microsegundos do timestamp
+            ultima_retomada_str = str(dados['ultima_retomada']).split('.')[0]
+            ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
             tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
             tempo_atual += tempo_decorrido
         
