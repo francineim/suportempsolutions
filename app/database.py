@@ -449,7 +449,9 @@ def concluir_atendimento_admin(chamado_id):
         
         # Se estava em andamento, adicionar tempo decorrido
         if dados['status_atendimento'] == 'em_andamento' and dados['ultima_retomada']:
-            ultima_retomada = datetime.strptime(dados['ultima_retomada'], "%Y-%m-%d %H:%M:%S")
+            # Remover microsegundos do timestamp
+            ultima_retomada_str = str(dados['ultima_retomada']).split('.')[0]
+            ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
             tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
             tempo_final += tempo_decorrido
         
@@ -530,11 +532,13 @@ def obter_tempo_atendimento(chamado_id):
         # Se está em andamento, adicionar tempo desde última retomada
         if dados['status_atendimento'] == 'em_andamento' and dados['ultima_retomada']:
             try:
-                ultima_retomada = datetime.strptime(dados['ultima_retomada'], "%Y-%m-%d %H:%M:%S")
+                # Remover microsegundos do timestamp
+                ultima_retomada_str = str(dados['ultima_retomada']).split('.')[0]
+                ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
                 tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
                 tempo_atual += tempo_decorrido
-            except:
-                pass
+            except Exception as e:
+                print(f"Erro ao calcular tempo decorrido: {e}")
         
         return tempo_atual
         
