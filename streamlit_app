@@ -1,11 +1,51 @@
+"""
+Streamlit App Entry Point
+"""
+
 import sys
 import os
+import streamlit as st
 
-# Adicionar pasta app ao path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+# Configurar o path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+app_dir = os.path.join(current_dir, 'app')
+sys.path.insert(0, app_dir)
 
-# Importar e executar o main da pasta app
-from app.main import main
+# Configurar página
+st.set_page_config(
+    page_title="Helpdesk - MP Solutions",
+    page_icon="🎫",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-if __name__ == "__main__":
+# Verificar e criar diretórios necessários
+required_dirs = ['data', 'uploads', 'backups']
+for dir_name in required_dirs:
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+        print(f"✅ Diretório '{dir_name}' criado")
+
+# Importar e executar o main
+try:
+    from app.main import main
     main()
+except Exception as e:
+    st.error(f"❌ Erro ao iniciar a aplicação: {str(e)}")
+    st.info("""
+    ⚠️ **Problemas comuns:**
+    
+    1. **Banco de dados não inicializado:** 
+       - Clique em "Force Fix" na sidebar (se disponível)
+       - Ou execute o script de inicialização manualmente
+    
+    2. **Problemas de importação:**
+       - Verifique se a estrutura de pastas está correta
+       
+    3. **Permissões de arquivo:**
+       - Certifique-se de que os diretórios `data/` e `uploads/` têm permissão de escrita
+    """)
+    
+    # Botão para forçar inicialização
+    if st.button("🔄 Tentar Recarregar"):
+        st.rerun()
