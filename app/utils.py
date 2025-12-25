@@ -46,15 +46,22 @@ def gerar_nome_arquivo_seguro(nome_original):
 # ========== FORMATAÇÃO ==========
 
 def formatar_tempo(segundos):
-    """Formata segundos em HH:MM:SS."""
+    """
+    Formata segundos em HH:MM:SS para exibição.
+    Backend armazena em segundos (int).
+    Frontend exibe como HH:MM:SS (string).
+    """
     if segundos is None or segundos < 0:
         return "00:00:00"
     
+    # Garantir que é inteiro
     segundos = int(segundos)
+    
     horas = segundos // 3600
     minutos = (segundos % 3600) // 60
     segs = segundos % 60
     
+    # IMPLEMENTAÇÃO 7: Formato HH:MM:SS
     return f"{horas:02d}:{minutos:02d}:{segs:02d}"
 
 def formatar_data_br(data_str):
