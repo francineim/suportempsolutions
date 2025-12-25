@@ -611,3 +611,94 @@ def buscar_chamados_com_tempo():
         return chamados
     except:
         return []
+
+def retornar_chamado(chamado_id, usuario, mensagem_retorno):
+    """Cliente retorna um chamado concluído."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        # Verificar se o chamado pertence ao usuário e está concluído
+        cursor.execute("""
+            SELECT * FROM chamados 
+            WHERE id = ? AND usuario = ? AND status = 'Concluído'
+        """, (chamado_id, usuario))
+        
+        if not cursor.fetchone():
+            conn.close()
+            return False, "Chamado não pode ser retornado"
+        
+        # Atualizar status do chamado
+        cursor.execute("""
+            UPDATE chamados
+            SET status = 'Em atendimento',
+                status_atendimento = 'pausado',
+                retornos = retornos + 1
+            WHERE id = ?
+        """, (chamado_id,))
+        
+        # Criar interação de retorno
+        cursor.execute("""
+            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
+            VALUES (?, 'cliente', ?, 'retorno')
+        """, (chamado_id, mensagem_retorno))
+        
+        conn.commit()
+        conn.close()
+        
+        # Notificar por e-mail
+        try:
+            from services.chamados_service import notificar_chamado_retornado
+            notificar_chamado_retornado(chamado_id, mensagem_retorno)
+        except:
+            pass
+        
+        return True, "Chamado retornado com sucesso"
+    
+    except Exception as e:
+        return False, f"Erro: {e}"
+
+def buscar_interacoes_chamado(chamado_id):
+    """Busca todas as interações de um chamado."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT * FROM interacoes
+            WHERE chamado_id = ?
+            ORDER BY data ASC
+        """, (chamado_id,))
+        
+        interacoes = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return interacoes
+    except:
+        return []
+
+def adicionar_interacao_chamado(chamado_id, autor, mensagem):
+    """Adiciona nova interação a um chamado."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
+            VALUES (?, ?, ?, 'resposta')
+        """, (chamado_id, autor, mensagem))
+        
+        interacao_id = cursor.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        # Processar envio de e-mail
+        try:
+            from services.chamados_service import processar_envio_email_interacao
+            processar_envio_email_interacao(interacao_id)
+        except:
+            pass
+        
+        return True, "Mensagem adicionada"
+    except Exception as e:
+        return False, f"Erro: {e}"
