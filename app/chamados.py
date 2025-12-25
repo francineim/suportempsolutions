@@ -1,4 +1,3 @@
-# app/chamados.py (com timer em tempo real)
 import streamlit as st
 from database import (
     conectar, 
@@ -12,7 +11,11 @@ from database import (
     obter_tempo_atendimento,
     salvar_anexo,
     buscar_anexos,
-    excluir_anexo
+    excluir_anexo,
+    retornar_chamado,
+    buscar_interacoes_chamado,
+    adicionar_interacao_chamado,
+    buscar_mensagem_conclusao
 )
 from utils import (
     validar_arquivo,
@@ -23,8 +26,15 @@ from utils import (
     formatar_data_br,
     sanitizar_texto
 )
+from services.chamados_service import (
+    notificar_novo_chamado,
+    notificar_chamado_concluido,
+    notificar_chamado_retornado,
+    criar_interacao
+)
 import os
 from datetime import datetime
+import time
 
 def tela_chamados(usuario, perfil):
     """Tela principal de gerenciamento de chamados."""
@@ -66,6 +76,7 @@ def tela_chamados(usuario, perfil):
                         chamado_id = cursor.lastrowid
                         conn.close()
                         
+                        # Salvar anexo se fornecido
                         if arquivo is not None:
                             valido, msg = validar_arquivo(arquivo)
                             if valido:
@@ -81,8 +92,30 @@ def tela_chamados(usuario, perfil):
                                 salvar_anexo(chamado_id, arquivo.name, caminho)
                                 st.success(f"✅ Arquivo anexado!")
                         
+                        # Notificar por e-mail
+                        try:
+                            # Buscar dados completos do chamado
+                            conn = conectar()
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                SELECT c.*, u.email as email_cliente, u.empresa
+                                FROM chamados c
+                                LEFT JOIN usuarios u ON c.usuario = u.usuario
+                                WHERE c.id = ?
+                            """, (chamado_id,))
+                            chamado_dados = cursor.fetchone()
+                            conn.close()
+                            
+                            if chamado_dados:
+                                chamado_dict = dict(chamado_dados)
+                                notificar_novo_chamado(chamado_id)
+                                st.success("📧 E-mails de notificação enviados!")
+                        except Exception as email_error:
+                            st.warning(f"✅ Chamado criado, mas erro no envio de e-mails: {email_error}")
+                        
                         st.success(f"✅ Chamado #{chamado_id} aberto com sucesso!")
                         st.balloons()
+                        time.sleep(2)
                         st.rerun()
                         
                     except Exception as e:
@@ -165,110 +198,42 @@ def tela_chamados(usuario, perfil):
                         if perfil == "admin" and ch['status'] == "Em atendimento":
                             st.write("**⏱️ Controles:**")
                             
-                            # Mostrar tempo ATUAL (calculado em tempo real)
-                            tempo_atual = ch.get("tempo_atendimento_segundos", 0) or 0
-                            
-                            # Se está em andamento, somar tempo desde última retomada
-                            if ch.get('status_atendimento') == "em_andamento" and ch.get('ultima_retomada'):
-                                try:
-                                    # Remover microsegundos do timestamp
-                                    ultima_retomada_str = str(ch['ultima_retomada']).split('.')[0]
-                                    ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
-                                    tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
-                                    tempo_atual += tempo_decorrido
-                                except Exception as e:
-                                    st.caption(f"Aviso: Erro no cálculo de tempo")
+                            # Mostrar tempo ATUAL
+                            tempo_atual = obter_tempo_atendimento(ch['id'])
                             
                             # Exibir tempo com destaque
                             st.markdown(f"### ⏱️ {formatar_tempo(tempo_atual)}")
                             
                             # Botões de controle
-                            if ch.get('status_atendimento') == "em_andamento":
-                                if st.button(f"⏸️ Pausar", key=f"pausar_{ch['id']}"):
-                                    sucesso, mensagem = pausar_atendimento(ch['id'])
-                                    if sucesso:
-                                        st.success(mensagem)
-                                        st.rerun()
-                                    else:
-                                        st.error(mensagem)
+                            conn = conectar()
+                            cursor = conn.cursor()
+                            cursor.execute("SELECT status_atendimento FROM chamados WHERE id = ?", (ch['id'],))
+                            status_atendimento = cursor.fetchone()['status_atendimento']
+                            conn.close()
                             
-                            elif ch.get('status_atendimento') == "pausado":
-                                if st.button(f"▶️ Retomar", key=f"retomar_{ch['id']}"):
-                                    sucesso, mensagem = retomar_atendimento(ch['id'])
-                                    if sucesso:
-                                        st.success(mensagem)
-                                        st.rerun()
-                                    else:
-                                        st.error(mensagem)
+                            col_btn1, col_btn2 = st.columns(2)
                             
-                            # Botão de concluir
-                            if st.button(f"✅ Concluir", key=f"concluir_admin_{ch['id']}", type="primary"):
-                                # Mostrar formulário de conclusão em dialog
-                                st.session_state[f'mostrar_conclusao_{ch["id"]}'] = True
-                            
-                            # Formulário de conclusão
-                            if st.session_state.get(f'mostrar_conclusao_{ch["id"]}', False):
-                                with st.form(key=f"form_conclusao_{ch['id']}"):
-                                    st.write("**📝 Mensagem de Conclusão**")
-                                    mensagem = st.text_area(
-                                        "Mensagem para o cliente",
-                                        height=150,
-                                        placeholder="Descreva o que foi feito, orientações ao cliente, etc."
-                                    )
-                                    
-                                    arquivos_upload = st.file_uploader(
-                                        "Anexar arquivos (opcional)",
-                                        accept_multiple_files=True,
-                                        key=f"upload_conclusao_{ch['id']}"
-                                    )
-                                    
-                                    col_btn1, col_btn2 = st.columns(2)
-                                    
-                                    with col_btn1:
-                                        enviar = st.form_submit_button("✅ Concluir com Mensagem", type="primary")
-                                    
-                                    with col_btn2:
-                                        cancelar = st.form_submit_button("❌ Cancelar")
-                                    
-                                    if enviar:
-                                        arquivos_salvos = []
-                                        
-                                        # Processar arquivos
-                                        if arquivos_upload:
-                                            if not os.path.exists("uploads/conclusoes"):
-                                                os.makedirs("uploads/conclusoes")
-                                            
-                                            for arq in arquivos_upload:
-                                                valido, msg = validar_arquivo(arq)
-                                                if valido:
-                                                    nome_seguro = gerar_nome_arquivo_seguro(arq.name)
-                                                    caminho = os.path.join("uploads/conclusoes", nome_seguro)
-                                                    
-                                                    with open(caminho, "wb") as f:
-                                                        f.write(arq.getbuffer())
-                                                    
-                                                    arquivos_salvos.append({
-                                                        'nome': arq.name,
-                                                        'caminho': caminho
-                                                    })
-                                        
-                                        # Concluir com mensagem
-                                        sucesso, msg_resultado = concluir_atendimento_admin(
-                                            ch['id'], 
-                                            mensagem if mensagem else None,
-                                            arquivos_salvos if arquivos_salvos else None
-                                        )
-                                        
+                            with col_btn1:
+                                if status_atendimento == "em_andamento":
+                                    if st.button(f"⏸️ Pausar", key=f"pausar_{ch['id']}"):
+                                        sucesso, mensagem = pausar_atendimento(ch['id'])
                                         if sucesso:
-                                            st.success(msg_resultado)
-                                            del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                            st.success(mensagem)
                                             st.rerun()
                                         else:
-                                            st.error(msg_resultado)
-                                    
-                                    if cancelar:
-                                        del st.session_state[f'mostrar_conclusao_{ch["id"]}']
-                                        st.rerun()
+                                            st.error(mensagem)
+                                elif status_atendimento == "pausado":
+                                    if st.button(f"▶️ Retomar", key=f"retomar_{ch['id']}"):
+                                        sucesso, mensagem = retomar_atendimento(ch['id'])
+                                        if sucesso:
+                                            st.success(mensagem)
+                                            st.rerun()
+                                        else:
+                                            st.error(mensagem)
+                            
+                            with col_btn2:
+                                if st.button(f"✅ Concluir", key=f"concluir_admin_{ch['id']}", type="primary"):
+                                    st.session_state[f'mostrar_conclusao_{ch["id"]}'] = True
                         
                         # ========== CLIENTE: Concluir chamado ==========
                         if perfil != "admin" and ch['usuario'] == usuario and ch['status'] == "Em atendimento":
@@ -279,6 +244,11 @@ def tela_chamados(usuario, perfil):
                                     st.rerun()
                                 else:
                                     st.error(mensagem)
+                        
+                        # ========== CLIENTE: Retornar chamado ==========
+                        if perfil != "admin" and ch['usuario'] == usuario and ch['status'] == "Concluído":
+                            if st.button(f"🔄 Retornar", key=f"retornar_{ch['id']}"):
+                                st.session_state[f'mostrar_retorno_{ch["id"]}'] = True
                     
                     # Descrição
                     st.divider()
@@ -286,9 +256,154 @@ def tela_chamados(usuario, perfil):
                     descricao_completa = buscar_descricao_chamado(ch['id'])
                     st.text_area("", value=descricao_completa, height=100, disabled=True, key=f"desc_{ch['id']}")
                     
+                    # ========== INTERAÇÕES ==========
+                    st.divider()
+                    st.write("**💬 Histórico de Mensagens:**")
+                    
+                    interacoes = buscar_interacoes_chamado(ch['id'])
+                    
+                    if interacoes:
+                        for interacao in interacoes:
+                            autor_nome = "Atendente" if interacao['autor'] == "atendente" else "Cliente"
+                            cor = "#e3f2fd" if interacao['autor'] == "atendente" else "#f3e5f5"
+                            
+                            with st.container():
+                                st.markdown(f"""
+                                <div style="background-color: {cor}; padding: 10px; border-radius: 5px; margin: 5px 0;">
+                                    <strong>{autor_nome}</strong> ({formatar_data_br(interacao['data'])})
+                                    <p>{interacao['mensagem']}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                    else:
+                        st.info("📭 Nenhuma mensagem ainda")
+                    
+                    # Nova mensagem
+                    st.write("**📝 Nova Mensagem:**")
+                    nova_mensagem = st.text_area("Digite sua mensagem:", key=f"msg_{ch['id']}")
+                    
+                    if st.button("📤 Enviar Mensagem", key=f"enviar_msg_{ch['id']}"):
+                        if nova_mensagem:
+                            autor = "atendente" if perfil in ["admin", "suporte"] else "cliente"
+                            sucesso, resultado = adicionar_interacao_chamado(ch['id'], autor, nova_mensagem)
+                            
+                            if sucesso:
+                                st.success("✅ Mensagem enviada!")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Erro: {resultado}")
+                    
+                    # Formulário de conclusão (Admin)
+                    if st.session_state.get(f'mostrar_conclusao_{ch["id"]}', False):
+                        st.divider()
+                        st.write("**📝 Concluir Chamado:**")
+                        
+                        with st.form(key=f"form_conclusao_{ch['id']}"):
+                            mensagem_conclusao = st.text_area(
+                                "Mensagem para o cliente:",
+                                height=150,
+                                placeholder="Descreva o que foi feito, orientações ao cliente, etc."
+                            )
+                            
+                            arquivos_upload = st.file_uploader(
+                                "Anexar arquivos (opcional)",
+                                accept_multiple_files=True,
+                                key=f"upload_conclusao_{ch['id']}"
+                            )
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            
+                            with col_btn1:
+                                enviar = st.form_submit_button("✅ Concluir", type="primary")
+                            
+                            with col_btn2:
+                                cancelar = st.form_submit_button("❌ Cancelar")
+                            
+                            if enviar:
+                                arquivos_salvos = []
+                                
+                                # Processar arquivos
+                                if arquivos_upload:
+                                    if not os.path.exists("uploads/conclusoes"):
+                                        os.makedirs("uploads/conclusoes")
+                                    
+                                    for arq in arquivos_upload:
+                                        valido, msg = validar_arquivo(arq)
+                                        if valido:
+                                            nome_seguro = gerar_nome_arquivo_seguro(arq.name)
+                                            caminho = os.path.join("uploads/conclusoes", nome_seguro)
+                                            
+                                            with open(caminho, "wb") as f:
+                                                f.write(arq.getbuffer())
+                                            
+                                            arquivos_salvos.append({
+                                                'nome': arq.name,
+                                                'caminho': caminho
+                                            })
+                                
+                                # Concluir chamado
+                                sucesso, msg_resultado = concluir_atendimento_admin(
+                                    ch['id'], 
+                                    mensagem_conclusao if mensagem_conclusao else None,
+                                    arquivos_salvos if arquivos_salvos else None
+                                )
+                                
+                                if sucesso:
+                                    # Notificar por e-mail
+                                    try:
+                                        notificar_chamado_concluido(ch['id'], mensagem_conclusao)
+                                        st.success("📧 E-mail de conclusão enviado!")
+                                    except Exception as email_error:
+                                        st.warning(f"✅ Chamado concluído, mas erro no envio de e-mail: {email_error}")
+                                    
+                                    del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                    st.rerun()
+                                else:
+                                    st.error(msg_resultado)
+                            
+                            if cancelar:
+                                del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                st.rerun()
+                    
+                    # Formulário de retorno (Cliente)
+                    if st.session_state.get(f'mostrar_retorno_{ch["id"]}', False):
+                        st.divider()
+                        st.write("**🔄 Retornar Chamado:**")
+                        
+                        with st.form(key=f"form_retorno_{ch['id']}"):
+                            motivo_retorno = st.text_area(
+                                "Por que você está retornando este chamado?",
+                                height=150,
+                                placeholder="Descreva o motivo do retorno, o que ainda não está funcionando, etc."
+                            )
+                            
+                            col_btn1, col_btn2 = st.columns(2)
+                            
+                            with col_btn1:
+                                enviar = st.form_submit_button("🔄 Retornar", type="primary")
+                            
+                            with col_btn2:
+                                cancelar = st.form_submit_button("❌ Cancelar")
+                            
+                            if enviar:
+                                if motivo_retorno:
+                                    sucesso, resultado = retornar_chamado(ch['id'], usuario, motivo_retorno)
+                                    
+                                    if sucesso:
+                                        # A função retornar_chamado já chama a notificação
+                                        st.success("✅ Chamado retornado!")
+                                        del st.session_state[f'mostrar_retorno_{ch["id"]}']
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ Erro: {resultado}")
+                                else:
+                                    st.error("⚠️ Digite o motivo do retorno")
+                            
+                            if cancelar:
+                                del st.session_state[f'mostrar_retorno_{ch["id"]}']
+                                st.rerun()
+                    
                     # Mensagem de conclusão (se existir)
                     if ch['status'] == 'Concluído':
-                        from database import buscar_mensagem_conclusao
                         msg_conclusao = buscar_mensagem_conclusao(ch['id'])
                         
                         if msg_conclusao:
@@ -299,12 +414,6 @@ def tela_chamados(usuario, perfil):
                                 st.info(f"**Atendente:** {msg_conclusao['atendente']}")
                                 st.write(msg_conclusao['mensagem'])
                                 st.caption(f"Enviado em: {formatar_data_br(msg_conclusao['data_envio'])}")
-                                
-                                if msg_conclusao.get('arquivos'):
-                                    st.write("**📎 Arquivos anexados:**")
-                                    for arq in msg_conclusao['arquivos'].split(','):
-                                        if arq:
-                                            st.write(f"📄 {arq}")
                     
                     # Anexos
                     st.divider()
@@ -330,8 +439,8 @@ def tela_chamados(usuario, perfil):
                                             key=f"dl_{anexo['id']}"
                                         )
                     else:
-                        st.info("Sem anexos")
-    
+                        st.info("📭 Nenhum anexo")
+        
     except Exception as e:
         st.error(f"❌ Erro: {str(e)}")
         import traceback
