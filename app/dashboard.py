@@ -92,14 +92,16 @@ def tela_dashboard():
                     # Se está em andamento, calcular tempo decorrido desde última retomada
                     if ch["status_atendimento"] == "em_andamento" and ch["ultima_retomada"]:
                         try:
-                            ultima_retomada = datetime.strptime(ch["ultima_retomada"], "%Y-%m-%d %H:%M:%S")
+                            # Remover microsegundos do timestamp
+                            ultima_retomada_str = str(ch["ultima_retomada"]).split('.')[0]
+                            ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
                             tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
                             tempo_atual += tempo_decorrido
                         except Exception as e:
-                            st.error(f"Erro ao calcular tempo: {e}")
+                            st.caption(f"Aviso: {e}")
                     
                     tempo_formatado = formatar_tempo(tempo_atual)
-                    status_emoji = "⏸️" if ch.get("status_atendimento") == "pausado" else "▶️"
+                    status_emoji = "⏸️" if ch["status_atendimento"] == "pausado" else "▶️"
                     
                     # Card para cada chamado
                     with st.container():
@@ -111,7 +113,7 @@ def tela_dashboard():
                         
                         with col_b:
                             # Destacar tempo se estiver rodando
-                            if ch.get("status_atendimento") == "em_andamento":
+                            if ch["status_atendimento"] == "em_andamento":
                                 st.markdown(f"### ⏱️ {tempo_formatado}")
                             else:
                                 st.write(f"⏱️ {tempo_formatado}")
