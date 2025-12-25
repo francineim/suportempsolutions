@@ -315,14 +315,14 @@ def retomar_atendimento(chamado_id):
     except Exception as e:
         return False, f"Erro: {e}"
 
-def concluir_atendimento_admin(chamado_id):
-    """Admin conclui o atendimento."""
+def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_conclusao=None):
+    """Admin conclui o atendimento com mensagem opcional."""
     try:
         conn = conectar()
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT tempo_atendimento_segundos, ultima_retomada, status_atendimento
+            SELECT tempo_atendimento_segundos, ultima_retomada, status_atendimento, atendente
             FROM chamados
             WHERE id = ? AND status = 'Em atendimento'
         """, (chamado_id,))
@@ -351,6 +351,23 @@ def concluir_atendimento_admin(chamado_id):
                 status_atendimento = 'concluido'
             WHERE id = ?
         """, (agora, tempo_final, chamado_id))
+        
+        # Salvar mensagem de conclusão se fornecida
+        if mensagem_conclusao:
+            cursor.execute("""
+                INSERT INTO mensagens_conclusao (chamado_id, mensagem, atendente)
+                VALUES (?, ?, ?)
+            """, (chamado_id, mensagem_conclusao, dados['atendente']))
+            
+            mensagem_id = cursor.lastrowid
+            
+            # Salvar anexos de conclusão se fornecidos
+            if arquivos_conclusao:
+                for arquivo_info in arquivos_conclusao:
+                    cursor.execute("""
+                        INSERT INTO anexos_conclusao (mensagem_id, nome_arquivo, caminho_arquivo)
+                        VALUES (?, ?, ?)
+                    """, (mensagem_id, arquivo_info['nome'], arquivo_info['caminho']))
         
         conn.commit()
         conn.close()
@@ -498,3 +515,82 @@ def buscar_estatisticas_usuario(usuario, perfil):
         }
     except:
         return {"total": 0, "novos": 0, "em_atendimento": 0, "concluidos": 0}
+
+def buscar_mensagem_conclusao(chamado_id):
+    """Busca mensagem de conclusão do chamado."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT m.*, GROUP_CONCAT(a.nome_arquivo) as arquivos
+            FROM mensagens_conclusao m
+            LEFT JOIN anexos_conclusao a ON m.id = a.mensagem_id
+            WHERE m.chamado_id = ?
+            GROUP BY m.id
+            ORDER BY m.data_envio DESC
+            LIMIT 1
+        """, (chamado_id,))
+        
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        return dict(resultado) if resultado else None
+    except:
+        return None
+
+def buscar_estatisticas_por_empresa():
+    """Busca estatísticas agrupadas por empresa (ADMIN)."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                u.empresa,
+                COUNT(DISTINCT c.id) as total_chamados,
+                COUNT(DISTINCT CASE WHEN c.status = 'Novo' THEN c.id END) as novos,
+                COUNT(DISTINCT CASE WHEN c.status = 'Em atendimento' THEN c.id END) as em_atendimento,
+                COUNT(DISTINCT CASE WHEN c.status = 'Concluído' THEN c.id END) as concluidos,
+                AVG(CASE WHEN c.tempo_atendimento_segundos > 0 THEN c.tempo_atendimento_segundos END) as tempo_medio
+            FROM usuarios u
+            LEFT JOIN chamados c ON u.usuario = c.usuario
+            WHERE u.empresa IS NOT NULL AND u.empresa != ''
+            GROUP BY u.empresa
+            ORDER BY total_chamados DESC
+        """)
+        
+        empresas = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return empresas
+    except Exception as e:
+        print(f"Erro: {e}")
+        return []
+
+def buscar_chamados_com_tempo():
+    """Busca chamados concluídos com tempo de atendimento (ADMIN)."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT 
+                c.id,
+                c.assunto,
+                c.usuario,
+                u.empresa,
+                c.atendente,
+                c.tempo_atendimento_segundos,
+                c.data_abertura,
+                c.data_fim_atendimento
+            FROM chamados c
+            LEFT JOIN usuarios u ON c.usuario = u.usuario
+            WHERE c.status = 'Concluído' AND c.tempo_atendimento_segundos > 0
+            ORDER BY c.data_fim_atendimento DESC
+        """)
+        
+        chamados = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return chamados
+    except:
+        return []
