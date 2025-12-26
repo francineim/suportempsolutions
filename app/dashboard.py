@@ -25,12 +25,26 @@ def tela_dashboard():
     if perfil != "admin":
         st.info("📊 Seus Chamados")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     col1.metric("Total", estatisticas["total"])
     col2.metric("Novos", estatisticas["novos"])
     col3.metric("Em Atendimento", estatisticas["em_atendimento"])
     col4.metric("Concluídos", estatisticas["concluidos"])
+    
+    # Contar finalizados
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        if perfil == "admin":
+            cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE status = 'Finalizado'")
+        else:
+            cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE usuario = ? AND status = 'Finalizado'", (usuario,))
+        finalizados = cursor.fetchone()['finalizados']
+        conn.close()
+        col5.metric("Finalizados", finalizados)
+    except:
+        col5.metric("Finalizados", 0)
     
     if estatisticas["total"] > 0:
         st.markdown("---")
