@@ -30,20 +30,27 @@ def tela_dashboard():
     col1.metric("Total", estatisticas["total"])
     col2.metric("Novos", estatisticas["novos"])
     col3.metric("Em Atendimento", estatisticas["em_atendimento"])
-    col4.metric("Concluídos", estatisticas["concluidos"])
     
-    # Contar finalizados
+    # Contar aguardando finalização e finalizados
     try:
         conn = conectar()
         cursor = conn.cursor()
         if perfil == "admin":
+            cursor.execute("SELECT COUNT(*) as aguardando FROM chamados WHERE status = 'Aguardando Finalização'")
+            aguardando = cursor.fetchone()['aguardando']
             cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE status = 'Finalizado'")
+            finalizados = cursor.fetchone()['finalizados']
         else:
+            cursor.execute("SELECT COUNT(*) as aguardando FROM chamados WHERE usuario = ? AND status = 'Aguardando Finalização'", (usuario,))
+            aguardando = cursor.fetchone()['aguardando']
             cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE usuario = ? AND status = 'Finalizado'", (usuario,))
-        finalizados = cursor.fetchone()['finalizados']
+            finalizados = cursor.fetchone()['finalizados']
         conn.close()
+        
+        col4.metric("Aguardando", aguardando)
         col5.metric("Finalizados", finalizados)
     except:
+        col4.metric("Aguardando", 0)
         col5.metric("Finalizados", 0)
     
     if estatisticas["total"] > 0:
@@ -54,7 +61,7 @@ def tela_dashboard():
         
         chart_data = pd.DataFrame({
             'Quantidade': [estatisticas["novos"], estatisticas["em_atendimento"], estatisticas["concluidos"]]
-        }, index=['Novos', 'Em Atendimento', 'Concluídos'])
+        }, index=['Novos', 'Em Atendimento', 'Aguardando/Finalizados'])
         
         st.bar_chart(chart_data)
     
