@@ -1,178 +1,155 @@
-# app/dashboard.py
-import streamlit as st
-from database import (
-    buscar_estatisticas_usuario, 
-    conectar, 
-    obter_tempo_atendimento,
-    buscar_estatisticas_por_empresa,
-    buscar_chamados_com_tempo
-)
-from utils import formatar_tempo
+# app/utils.py
+import hashlib
+import secrets
+import os
+from datetime import datetime
+import re
 
-def tela_dashboard():
-    st.subheader("📊 Dashboard")
+# ========== SEGURANÇA DE SENHAS ==========
+
+def hash_senha(senha, salt=None):
+    """Cria hash seguro da senha."""
+    if not salt:
+        salt = secrets.token_hex(16)
+    hash_obj = hashlib.pbkdf2_hmac('sha256', senha.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return hash_obj.hex(), salt
+
+def verificar_senha(senha, hash_armazenado, salt):
+    """Verifica se a senha corresponde ao hash."""
+    hash_calculado, _ = hash_senha(senha, salt)
+    return hash_calculado == hash_armazenado
+
+# ========== VALIDAÇÃO DE ARQUIVOS ==========
+
+def validar_arquivo(arquivo):
+    """Valida tamanho e tipo de arquivo."""
+    if arquivo is None:
+        return False, "Nenhum arquivo selecionado"
     
-    usuario = st.session_state.get('usuario')
-    perfil = st.session_state.get('perfil')
+    arquivo.seek(0, os.SEEK_END)
+    tamanho = arquivo.tell()
+    arquivo.seek(0)
     
-    if not usuario:
-        st.error("Usuário não autenticado")
-        return
+    if tamanho > 10 * 1024 * 1024:
+        return False, "Arquivo muito grande. Máximo: 10 MB"
     
-    estatisticas = buscar_estatisticas_usuario(usuario, perfil)
+    return True, "OK"
+
+def gerar_nome_arquivo_seguro(nome_original):
+    """Gera nome de arquivo único e seguro."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    uuid_parte = secrets.token_hex(4)
+    nome_limpo = "".join(c for c in nome_original if c.isalnum() or c in "._- ")
+    nome, extensao = os.path.splitext(nome_limpo)
+    return f"{timestamp}_{uuid_parte}_{nome}{extensao}"
+
+# ========== FORMATAÇÃO ==========
+
+def formatar_tempo(segundos):
+    """
+    Formata segundos em HH:MM:SS para exibição.
+    Backend armazena em segundos (int).
+    Frontend exibe como HH:MM:SS (string).
+    """
+    if segundos is None or segundos < 0:
+        return "00:00:00"
     
-    # IMPLEMENTAÇÃO 5: Texto simplificado
-    if perfil != "admin":
-        st.info("📊 Seus Chamados")
+    # Garantir que é inteiro
+    segundos = int(segundos)
     
-    col1, col2, col3, col4, col5 = st.columns(5)
+    horas = segundos // 3600
+    minutos = (segundos % 3600) // 60
+    segs = segundos % 60
     
-    col1.metric("Total", estatisticas["total"])
-    col2.metric("Novos", estatisticas["novos"])
-    col3.metric("Em Atendimento", estatisticas["em_atendimento"])
+    # IMPLEMENTAÇÃO 7: Formato HH:MM:SS
+    return f"{horas:02d}:{minutos:02d}:{segs:02d}"
+
+def formatar_data_br(data_str):
+    """Formata data para padrão brasileiro."""
+    if not data_str:
+        return ""
     
-    # Contar aguardando finalização e finalizados
     try:
-        conn = conectar()
-        cursor = conn.cursor()
-        if perfil == "admin":
-            cursor.execute("SELECT COUNT(*) as aguardando FROM chamados WHERE status = 'Aguardando Finalização'")
-            aguardando = cursor.fetchone()['aguardando']
-            cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE status = 'Finalizado'")
-            finalizados = cursor.fetchone()['finalizados']
-        else:
-            cursor.execute("SELECT COUNT(*) as aguardando FROM chamados WHERE usuario = ? AND status = 'Aguardando Finalização'", (usuario,))
-            aguardando = cursor.fetchone()['aguardando']
-            cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE usuario = ? AND status = 'Finalizado'", (usuario,))
-            finalizados = cursor.fetchone()['finalizados']
-        conn.close()
+        # Limpar microsegundos e espaços
+        data_str = str(data_str).strip()
+        if '.' in data_str:
+            data_str = data_str.split('.')[0]
         
-        col4.metric("Aguardando", aguardando)
-        col5.metric("Finalizados", finalizados)
+        data = datetime.strptime(data_str, "%Y-%m-%d %H:%M:%S")
+        return data.strftime("%d/%m/%Y %H:%M")
     except:
-        col4.metric("Aguardando", 0)
-        col5.metric("Finalizados", 0)
+        return str(data_str)
+
+def parse_datetime_safe(data_str):
+    """Converte string para datetime de forma segura."""
+    if not data_str:
+        return None
     
-    if estatisticas["total"] > 0:
-        st.markdown("---")
-        st.subheader("📈 Distribuição")
+    try:
+        # Limpar microsegundos
+        data_str = str(data_str).strip()
+        if '.' in data_str:
+            data_str = data_str.split('.')[0]
         
-        import pandas as pd
-        
-        chart_data = pd.DataFrame({
-            'Quantidade': [estatisticas["novos"], estatisticas["em_atendimento"], estatisticas["concluidos"]]
-        }, index=['Novos', 'Em Atendimento', 'Aguardando/Finalizados'])
-        
-        st.bar_chart(chart_data)
+        return datetime.strptime(data_str, "%Y-%m-%d %H:%M:%S")
+    except:
+        return None
+
+# ========== BADGES ==========
+
+def badge_status(status):
+    """Retorna emoji para status."""
+    badges = {
+        "Novo": "🔴",
+        "Em atendimento": "🟡",
+        "Aguardando Finalização": "🟦",
+        "Finalizado": "✅",
+        "Cancelado": "⚫"
+    }
+    return badges.get(status, "⚪")
+
+def badge_prioridade(prioridade):
+    """Retorna emoji para prioridade."""
+    badges = {
+        "Baixa": "🟢",
+        "Média": "🟡",
+        "Alta": "🟠",
+        "Urgente": "🔴"
+    }
+    return badges.get(prioridade, "⚪")
+
+# ========== VALIDAÇÕES ==========
+
+def validar_email(email):
+    """Valida formato de email."""
+    if not email:
+        return False
+    padrao = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(padrao, email) is not None
+
+def validar_senha_forte(senha):
+    """Valida força da senha."""
+    if len(senha) < 6:
+        return False, "Senha deve ter no mínimo 6 caracteres"
+    return True, "Senha válida"
+
+def sanitizar_texto(texto):
+    """Remove caracteres perigosos."""
+    if not texto:
+        return ""
     
-    # IMPLEMENTAÇÃO 2: Estatísticas avançadas para ADMIN
-    if perfil == "admin":
-        st.markdown("---")
-        
-        # Abas para diferentes visualizações
-        tab1, tab2, tab3 = st.tabs(["📊 Por Empresa", "🎫 Por Chamado", "⏱️ Chamados em Andamento"])
-        
-        # TAB 1: Estatísticas por Empresa
-        with tab1:
-            st.subheader("📊 Estatísticas por Empresa")
-            
-            empresas = buscar_estatisticas_por_empresa()
-            
-            if empresas:
-                for emp in empresas:
-                    with st.expander(f"🏢 {emp['empresa'] or 'Sem empresa'}"):
-                        col_e1, col_e2, col_e3, col_e4 = st.columns(4)
-                        
-                        col_e1.metric("Total", emp['total_chamados'])
-                        col_e2.metric("Novos", emp['novos'])
-                        col_e3.metric("Em Atend.", emp['em_atendimento'])
-                        col_e4.metric("Concluídos", emp['concluidos'])
-                        
-                        if emp['tempo_medio']:
-                            st.write(f"**⏱️ Tempo Médio de Atendimento:** {formatar_tempo(int(emp['tempo_medio']))}")
-            else:
-                st.info("📭 Nenhuma estatística disponível")
-        
-        # TAB 2: Estatísticas por Chamado
-        with tab2:
-            st.subheader("🎫 Chamados Concluídos - Tempo de Atendimento")
-            
-            chamados = buscar_chamados_com_tempo()
-            
-            if chamados:
-                # Criar DataFrame
-                df_chamados = pd.DataFrame([
-                    {
-                        'ID': f"#{ch['id']}",
-                        'Assunto': ch['assunto'][:30] + '...' if len(ch['assunto']) > 30 else ch['assunto'],
-                        'Cliente': ch['usuario'],
-                        'Empresa': ch['empresa'] or 'N/A',
-                        'Atendente': ch['atendente'] or 'N/A',
-                        'Tempo': formatar_tempo(ch['tempo_atendimento_segundos']),
-                        'Abertura': ch['data_abertura'][:10] if ch['data_abertura'] else 'N/A'
-                    }
-                    for ch in chamados
-                ])
-                
-                st.dataframe(df_chamados, use_container_width=True, hide_index=True)
-                
-                # Estatísticas gerais
-                st.divider()
-                
-                col_s1, col_s2, col_s3 = st.columns(3)
-                
-                tempos = [ch['tempo_atendimento_segundos'] for ch in chamados]
-                tempo_medio = sum(tempos) / len(tempos) if tempos else 0
-                tempo_min = min(tempos) if tempos else 0
-                tempo_max = max(tempos) if tempos else 0
-                
-                col_s1.metric("⏱️ Tempo Médio", formatar_tempo(int(tempo_medio)))
-                col_s2.metric("🏃 Mais Rápido", formatar_tempo(tempo_min))
-                col_s3.metric("🐌 Mais Lento", formatar_tempo(tempo_max))
-            else:
-                st.info("📭 Nenhum chamado concluído ainda")
-        
-        # TAB 3: Chamados em Andamento (original)
-        with tab3:
-            st.subheader("⏱️ Chamados em Atendimento")
-            
-            if estatisticas["em_atendimento"] > 0:
-                if st.button("🔄 Atualizar Tempos"):
-                    st.rerun()
-                
-                try:
-                    conn = conectar()
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT c.id, c.assunto, c.usuario, u.empresa, c.atendente, c.status_atendimento
-                        FROM chamados c
-                        LEFT JOIN usuarios u ON c.usuario = u.usuario
-                        WHERE c.status = 'Em atendimento'
-                        ORDER BY c.id DESC
-                    """)
-                    
-                    chamados = cursor.fetchall()
-                    conn.close()
-                    
-                    for ch in chamados:
-                        tempo = obter_tempo_atendimento(ch['id'])
-                        status_emoji = "⏸️" if ch['status_atendimento'] == "pausado" else "▶️"
-                        
-                        col_a, col_b = st.columns([3, 1])
-                        
-                        with col_a:
-                            st.write(f"{status_emoji} **#{ch['id']}** - {ch['assunto']}")
-                            empresa_txt = f" ({ch['empresa']})" if ch['empresa'] else ""
-                            st.caption(f"Cliente: {ch['usuario']}{empresa_txt} | Atendente: {ch['atendente']}")
-                        
-                        with col_b:
-                            if ch['status_atendimento'] == 'em_andamento':
-                                st.markdown(f"### {formatar_tempo(tempo)}")
-                            else:
-                                st.write(formatar_tempo(tempo))
-                        
-                        st.divider()
-                except Exception as e:
-                    st.error(f"Erro: {e}")
-            else:
-                st.info("📭 Nenhum chamado em atendimento")
+    # Remove tags HTML básicas
+    texto = re.sub(r'<[^>]+>', '', str(texto))
+    texto = ''.join(char for char in texto if ord(char) >= 32 or char in '\n\r\t')
+    
+    return texto.strip()
+
+# ========== UTILITÁRIOS ==========
+
+def registrar_log(acao, usuario, detalhes=""):
+    """Registra ação do usuário."""
+    pass  # Implementar se necessário
+
+def verificar_timeout_sessao():
+    """Verifica timeout de sessão."""
+    pass  # Implementar se necessário
