@@ -1,28 +1,12 @@
-# app/main.py - VERSÃO FINAL COMPLETA
+# app/main.py
 import streamlit as st
-import sys
-import os
-
-# Adicionar pasta app ao path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-# Imports com tratamento de erro
-try:
-    import database
-    from database import criar_tabelas, conectar
-    import auth
-    from auth import login, tela_cadastro_usuario
-    import chamados
-    from chamados import tela_chamados
-    import dashboard
-    from dashboard import tela_dashboard
-except ImportError as e:
-    st.error(f"Erro ao importar módulos: {e}")
-    st.stop()
-
 import time
+
+# Imports locais (dentro da pasta app/)
+from database import criar_tabelas, conectar
+from auth import login, tela_cadastro_usuario
+from chamados import tela_chamados
+from dashboard import tela_dashboard
 
 # Configuração da página
 st.set_page_config(
@@ -128,7 +112,9 @@ def main():
         elif pagina == "force_fix":
             # Importar force_fix
             try:
-                sys.path.insert(0, os.path.join(current_dir, 'pages'))
+                import sys
+                import os
+                sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'pages'))
                 from pages.force_fix import fix_database
                 fix_database()
             except Exception as e:
