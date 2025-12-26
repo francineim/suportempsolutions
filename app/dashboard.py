@@ -5,9 +5,10 @@ from database import (
     conectar, 
     obter_tempo_atendimento,
     buscar_estatisticas_por_empresa,
-    buscar_chamados_com_tempo,
-    formatar_tempo  # Importar do database para evitar circular import
+    buscar_chamados_com_tempo
 )
+# CORREÇÃO: Importar formatar_tempo do utils, não do database
+from utils import formatar_tempo
 
 def tela_dashboard():
     st.subheader("📊 Dashboard")
