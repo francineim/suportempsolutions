@@ -1,4 +1,4 @@
-# app/database.py - VERSÃO CORRIGIDA
+# app/database.py - VERSÃO COMPLETA COM ANEXOS DE INTERAÇÃO
 import sqlite3
 import os
 from datetime import datetime
@@ -91,7 +91,7 @@ def criar_tabelas():
             )
         """)
         
-        # Tabela de interações (NOVA)
+        # Tabela de interações
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interacoes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,11 +106,22 @@ def criar_tabelas():
             )
         """)
         
-        # ========== MIGRAÇÃO: Adicionar coluna retornos se não existir ==========
+        # Tabela de anexos de interação (NOVA)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS anexos_interacao (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                interacao_id INTEGER NOT NULL,
+                nome_arquivo TEXT NOT NULL,
+                caminho_arquivo TEXT NOT NULL,
+                data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (interacao_id) REFERENCES interacoes(id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Migração: Adicionar coluna retornos se não existir
         try:
             cursor.execute("SELECT retornos FROM chamados LIMIT 1")
         except:
-            # Coluna não existe, adicionar
             cursor.execute("ALTER TABLE chamados ADD COLUMN retornos INTEGER DEFAULT 0")
             print("✅ Coluna 'retornos' adicionada à tabela chamados")
         
@@ -119,6 +130,7 @@ def criar_tabelas():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_usuario ON chamados(usuario)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_mensagens_chamado ON mensagens_conclusao(chamado_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_interacoes_chamado ON interacoes(chamado_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_anexos_interacao ON anexos_interacao(interacao_id)")
         
         # Verificar se admin existe
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
@@ -368,7 +380,6 @@ def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_con
         
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # MUDANÇA: Status vai para "Aguardando Finalização" em vez de "Concluído"
         cursor.execute("""
             UPDATE chamados
             SET status = 'Aguardando Finalização',
@@ -378,7 +389,6 @@ def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_con
             WHERE id = ?
         """, (agora, tempo_final, chamado_id))
         
-        # Salvar mensagem de conclusão se fornecida
         if mensagem_conclusao:
             cursor.execute("""
                 INSERT INTO mensagens_conclusao (chamado_id, mensagem, atendente)
@@ -387,7 +397,6 @@ def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_con
             
             mensagem_id = cursor.lastrowid
             
-            # Salvar anexos de conclusão se fornecidos
             if arquivos_conclusao:
                 for arquivo_info in arquivos_conclusao:
                     cursor.execute("""
@@ -624,13 +633,14 @@ def buscar_chamados_com_tempo():
         print(f"Erro em buscar_chamados_com_tempo: {e}")
         return []
 
+# ========== INTERAÇÕES ==========
+
 def retornar_chamado(chamado_id, usuario, mensagem_retorno):
     """Cliente retorna um chamado concluído."""
     try:
         conn = conectar()
         cursor = conn.cursor()
         
-        # Verificar se o chamado pertence ao usuário e está em status que permite retorno
         cursor.execute("""
             SELECT * FROM chamados 
             WHERE id = ? AND usuario = ? AND status IN ('Aguardando Finalização', 'Concluído')
@@ -640,7 +650,6 @@ def retornar_chamado(chamado_id, usuario, mensagem_retorno):
             conn.close()
             return False, "Chamado não pode ser retornado"
         
-        # Atualizar status do chamado
         cursor.execute("""
             UPDATE chamados
             SET status = 'Em atendimento',
@@ -649,7 +658,6 @@ def retornar_chamado(chamado_id, usuario, mensagem_retorno):
             WHERE id = ?
         """, (chamado_id,))
         
-        # Criar interação de retorno
         cursor.execute("""
             INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
             VALUES (?, 'cliente', ?, 'retorno')
@@ -658,7 +666,6 @@ def retornar_chamado(chamado_id, usuario, mensagem_retorno):
         conn.commit()
         conn.close()
         
-        # Notificar por e-mail
         try:
             from services.chamados_service import notificar_chamado_retornado
             notificar_chamado_retornado(chamado_id, mensagem_retorno)
@@ -704,7 +711,6 @@ def adicionar_interacao_chamado(chamado_id, autor, mensagem):
         conn.commit()
         conn.close()
         
-        # Processar envio de e-mail
         try:
             from services.chamados_service import processar_envio_email_interacao
             processar_envio_email_interacao(interacao_id)
@@ -716,21 +722,11 @@ def adicionar_interacao_chamado(chamado_id, autor, mensagem):
         return False, f"Erro: {e}"
 
 def finalizar_chamado_cliente(chamado_id, usuario):
-    """
-    Cliente finaliza um chamado (última ação, não pode mais retornar).
-    
-    Args:
-        chamado_id: ID do chamado
-        usuario: Usuário que está finalizando
-    
-    Returns:
-        tuple: (sucesso, mensagem)
-    """
+    """Cliente finaliza um chamado (última ação, não pode mais retornar)."""
     try:
         conn = conectar()
         cursor = conn.cursor()
         
-        # Verificar se o chamado pertence ao usuário e está aguardando finalização
         cursor.execute("""
             SELECT * FROM chamados 
             WHERE id = ? AND usuario = ? AND status = 'Aguardando Finalização'
@@ -742,14 +738,12 @@ def finalizar_chamado_cliente(chamado_id, usuario):
             conn.close()
             return False, "Chamado não encontrado ou não pode ser finalizado"
         
-        # Mudar para status "Finalizado"
         cursor.execute("""
             UPDATE chamados
             SET status = 'Finalizado'
             WHERE id = ?
         """, (chamado_id,))
         
-        # Registrar interação de finalização
         cursor.execute("""
             INSERT INTO interacoes (chamado_id, autor, mensagem, tipo, enviar_email)
             VALUES (?, 'cliente', 'Cliente finalizou o chamado', 'finalizacao', 0)
@@ -759,6 +753,108 @@ def finalizar_chamado_cliente(chamado_id, usuario):
         conn.close()
         
         return True, "✅ Chamado finalizado com sucesso!"
+    
+    except Exception as e:
+        return False, f"Erro: {e}"
+
+# ========== ANEXOS DE INTERAÇÃO (NOVO) ==========
+
+def buscar_anexos_interacao(interacao_id):
+    """Busca anexos de uma interação."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM anexos_interacao 
+            WHERE interacao_id = ?
+            ORDER BY id ASC
+        """, (interacao_id,))
+        anexos = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return anexos
+    except:
+        return []
+
+def adicionar_interacao_com_anexos(chamado_id, autor, mensagem, anexos=None):
+    """Adiciona nova interação a um chamado com suporte a anexos."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
+            VALUES (?, ?, ?, 'resposta')
+        """, (chamado_id, autor, mensagem))
+        
+        interacao_id = cursor.lastrowid
+        
+        if anexos:
+            for anexo in anexos:
+                cursor.execute("""
+                    INSERT INTO anexos_interacao (interacao_id, nome_arquivo, caminho_arquivo)
+                    VALUES (?, ?, ?)
+                """, (interacao_id, anexo['nome'], anexo['caminho']))
+        
+        conn.commit()
+        conn.close()
+        
+        try:
+            from services.chamados_service import processar_envio_email_interacao
+            processar_envio_email_interacao(interacao_id)
+        except:
+            pass
+        
+        return True, "Mensagem adicionada com sucesso"
+    except Exception as e:
+        return False, f"Erro: {e}"
+
+def retornar_chamado_admin(chamado_id, admin, mensagem_retorno, anexos=None):
+    """Admin retorna um chamado para o cliente com mensagem e anexos opcionais."""
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT * FROM chamados 
+            WHERE id = ? AND status IN ('Em atendimento', 'Aguardando Finalização')
+        """, (chamado_id,))
+        
+        if not cursor.fetchone():
+            conn.close()
+            return False, "Chamado não pode ser retornado"
+        
+        cursor.execute("""
+            UPDATE chamados
+            SET status = 'Aguardando Cliente',
+                status_atendimento = 'aguardando_cliente',
+                retornos = retornos + 1
+            WHERE id = ?
+        """, (chamado_id,))
+        
+        cursor.execute("""
+            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
+            VALUES (?, 'atendente', ?, 'retorno_admin')
+        """, (chamado_id, f"[{admin}] {mensagem_retorno}"))
+        
+        interacao_id = cursor.lastrowid
+        
+        if anexos:
+            for anexo in anexos:
+                cursor.execute("""
+                    INSERT INTO anexos_interacao (interacao_id, nome_arquivo, caminho_arquivo)
+                    VALUES (?, ?, ?)
+                """, (interacao_id, anexo['nome'], anexo['caminho']))
+        
+        conn.commit()
+        conn.close()
+        
+        try:
+            from services.chamados_service import notificar_chamado_retornado_admin
+            notificar_chamado_retornado_admin(chamado_id, mensagem_retorno)
+        except:
+            pass
+        
+        return True, "Chamado retornado ao cliente com sucesso"
     
     except Exception as e:
         return False, f"Erro: {e}"
