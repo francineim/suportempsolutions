@@ -103,6 +103,7 @@ def badge_status(status):
         "Novo": "🔴",
         "Em atendimento": "🟡",
         "Concluído": "🟢",
+        "Finalizado": "✅",
         "Cancelado": "⚫"
     }
     return badges.get(status, "⚪")
