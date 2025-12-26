@@ -368,9 +368,10 @@ def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_con
         
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # MUDANÇA: Status vai para "Aguardando Finalização" em vez de "Concluído"
         cursor.execute("""
             UPDATE chamados
-            SET status = 'Concluído',
+            SET status = 'Aguardando Finalização',
                 data_fim_atendimento = ?,
                 tempo_atendimento_segundos = ?,
                 status_atendimento = 'concluido'
@@ -397,7 +398,7 @@ def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_con
         conn.commit()
         conn.close()
         
-        return True, f"✅ Concluído! Tempo: {formatar_tempo(tempo_final)}"
+        return True, f"✅ Atendimento concluído! Tempo: {formatar_tempo(tempo_final)}"
     except Exception as e:
         return False, f"Erro: {e}"
 
@@ -626,10 +627,10 @@ def retornar_chamado(chamado_id, usuario, mensagem_retorno):
         conn = conectar()
         cursor = conn.cursor()
         
-        # Verificar se o chamado pertence ao usuário e está concluído
+        # Verificar se o chamado pertence ao usuário e está em status que permite retorno
         cursor.execute("""
             SELECT * FROM chamados 
-            WHERE id = ? AND usuario = ? AND status = 'Concluído'
+            WHERE id = ? AND usuario = ? AND status IN ('Aguardando Finalização', 'Concluído')
         """, (chamado_id, usuario))
         
         if not cursor.fetchone():
@@ -713,7 +714,7 @@ def adicionar_interacao_chamado(chamado_id, autor, mensagem):
 
 def finalizar_chamado_cliente(chamado_id, usuario):
     """
-    Cliente finaliza um chamado concluído (não pode mais retornar).
+    Cliente finaliza um chamado (última ação, não pode mais retornar).
     
     Args:
         chamado_id: ID do chamado
@@ -726,10 +727,10 @@ def finalizar_chamado_cliente(chamado_id, usuario):
         conn = conectar()
         cursor = conn.cursor()
         
-        # Verificar se o chamado pertence ao usuário e está concluído
+        # Verificar se o chamado pertence ao usuário e está aguardando finalização
         cursor.execute("""
             SELECT * FROM chamados 
-            WHERE id = ? AND usuario = ? AND status = 'Concluído'
+            WHERE id = ? AND usuario = ? AND status = 'Aguardando Finalização'
         """, (chamado_id, usuario))
         
         chamado = cursor.fetchone()
@@ -738,7 +739,7 @@ def finalizar_chamado_cliente(chamado_id, usuario):
             conn.close()
             return False, "Chamado não encontrado ou não pode ser finalizado"
         
-        # Criar status especial "Finalizado"
+        # Mudar para status "Finalizado"
         cursor.execute("""
             UPDATE chamados
             SET status = 'Finalizado'
