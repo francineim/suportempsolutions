@@ -3,17 +3,25 @@ import streamlit as st
 import sys
 import os
 
-# Adicionar pasta raiz ao path
+# Adicionar pasta app ao path
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.insert(0, current_dir)
-sys.path.insert(0, parent_dir)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
-# Imports
-from database import criar_tabelas, conectar
-from auth import login, tela_cadastro_usuario
-from chamados import tela_chamados
-from dashboard import tela_dashboard
+# Imports com tratamento de erro
+try:
+    import database
+    from database import criar_tabelas, conectar
+    import auth
+    from auth import login, tela_cadastro_usuario
+    import chamados
+    from chamados import tela_chamados
+    import dashboard
+    from dashboard import tela_dashboard
+except ImportError as e:
+    st.error(f"Erro ao importar módulos: {e}")
+    st.stop()
+
 import time
 
 # Configuração da página
