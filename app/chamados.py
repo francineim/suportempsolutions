@@ -15,7 +15,8 @@ from database import (
     excluir_anexo,
     retornar_chamado,
     buscar_interacoes_chamado,
-    adicionar_interacao_chamado
+    adicionar_interacao_chamado,
+    finalizar_chamado_cliente
 )
 from utils import (
     validar_arquivo,
@@ -364,27 +365,55 @@ def tela_chamados(usuario, perfil):
                     # IMPLEMENTAÇÃO 5: Botão de Retorno (apenas para cliente se concluído)
                     if ch['status'] == 'Concluído' and ch['usuario'] == usuario and perfil != 'admin':
                         st.divider()
-                        st.write("**🔄 Retornar Chamado**")
                         
-                        with st.form(key=f"form_retorno_{ch['id']}"):
-                            st.warning("Use esta opção se o problema não foi resolvido ou precisa de mais atenção.")
+                        # Criar 2 colunas para os botões
+                        col_btn1, col_btn2 = st.columns(2)
+                        
+                        with col_btn1:
+                            st.write("**🔄 Retornar Chamado**")
                             
-                            mensagem_retorno = st.text_area(
-                                "Por que você está retornando este chamado?",
-                                placeholder="Explique o motivo do retorno...",
-                                height=100
-                            )
+                            with st.form(key=f"form_retorno_{ch['id']}"):
+                                st.warning("Use se o problema não foi resolvido.")
+                                
+                                mensagem_retorno = st.text_area(
+                                    "Por que você está retornando?",
+                                    placeholder="Explique o motivo do retorno...",
+                                    height=100
+                                )
+                                
+                                arquivo_retorno = st.file_uploader(
+                                    "Anexar arquivo (opcional)",
+                                    key=f"arquivo_retorno_{ch['id']}"
+                                )
+                                
+                                if st.form_submit_button("🔙 Retornar", type="secondary", use_container_width=True):
+                                    if not mensagem_retorno:
+                                        st.error("Explique o motivo do retorno")
+                                    else:
+                                        sucesso, msg = retornar_chamado(ch['id'], usuario, mensagem_retorno)
+                                        
+                                        if sucesso:
+                                            st.success(msg)
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
+                        
+                        with col_btn2:
+                            st.write("**✅ Finalizar Chamado**")
                             
-                            arquivo_retorno = st.file_uploader(
-                                "Anexar arquivo (opcional)",
-                                key=f"arquivo_retorno_{ch['id']}"
-                            )
-                            
-                            if st.form_submit_button("🔙 Retornar Chamado", type="primary"):
-                                if not mensagem_retorno:
-                                    st.error("Por favor, explique o motivo do retorno")
-                                else:
-                                    sucesso, msg = retornar_chamado(ch['id'], usuario, mensagem_retorno)
+                            with st.form(key=f"form_finalizar_{ch['id']}"):
+                                st.info("Use se o problema foi resolvido definitivamente.")
+                                
+                                st.write("")  # Espaçamento
+                                st.write("")  # Espaçamento
+                                
+                                confirmar = st.checkbox(
+                                    "Confirmo que o problema foi resolvido",
+                                    key=f"confirm_finalizar_{ch['id']}"
+                                )
+                                
+                                if st.form_submit_button("✅ Finalizar", type="primary", use_container_width=True, disabled=not confirmar):
+                                    sucesso, msg = finalizar_chamado_cliente(ch['id'], usuario)
                                     
                                     if sucesso:
                                         st.success(msg)
