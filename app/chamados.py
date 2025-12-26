@@ -1,4 +1,4 @@
-# app/chamados.py - VERSÃO FINAL COMPLETA
+# app/chamados.py - VERSÃO COMPLETA
 import streamlit as st
 import os
 from datetime import datetime
@@ -20,10 +20,11 @@ from database import (
     buscar_interacoes_chamado,
     adicionar_interacao_chamado,
     finalizar_chamado_cliente,
-    buscar_mensagem_conclusao
+    buscar_mensagem_conclusao,
+    buscar_anexos_interacao,
+    retornar_chamado_admin
 )
 
-# CORREÇÃO: Importar formatar_tempo do utils
 from utils import formatar_tempo
 
 def formatar_data_br(data):
@@ -33,11 +34,9 @@ def formatar_data_br(data):
     
     if isinstance(data, str):
         try:
-            # Tentar parsear string ISO
             data = datetime.fromisoformat(data.replace('Z', '+00:00'))
         except:
             try:
-                # Tentar formato padrão do SQLite
                 data = datetime.strptime(data.split('.')[0], "%Y-%m-%d %H:%M:%S")
             except:
                 return data
@@ -71,7 +70,6 @@ def tela_chamados(usuario, perfil):
                 if not assunto or not descricao:
                     st.error("⚠️ Preencha o assunto e a descrição")
                 else:
-                    # Import local para evitar circular import
                     from utils import sanitizar_texto, validar_arquivo, gerar_nome_arquivo_seguro
                     
                     assunto_limpo = sanitizar_texto(assunto)
@@ -106,16 +104,13 @@ def tela_chamados(usuario, perfil):
                                 salvar_anexo(chamado_id, arquivo.name, caminho)
                                 st.success(f"✅ Arquivo anexado!")
                         
-                        # IMPLEMENTAÇÃO 3: Notificar por e-mail
                         try:
                             print(f"\n📧 Tentando enviar e-mail para chamado #{chamado_id}...")
                             from services.chamados_service import notificar_novo_chamado, criar_interacao
                             
-                            # Criar interação de abertura
                             criar_interacao(chamado_id, 'cliente', descricao_limpa, 'abertura')
                             print(f"   ✅ Interação criada")
                             
-                            # Notificar
                             notificar_novo_chamado(chamado_id)
                             print(f"   ✅ Notificação enviada")
                             
@@ -139,7 +134,7 @@ def tela_chamados(usuario, perfil):
     with col_f1:
         filtro_status = st.selectbox(
             "Status", 
-            ["Todos", "Novo", "Em atendimento", "Aguardando Finalização", "Finalizado"]
+            ["Todos", "Novo", "Em atendimento", "Aguardando Finalização", "Aguardando Cliente", "Finalizado"]
         )
     
     with col_f2:
@@ -180,13 +175,11 @@ def tela_chamados(usuario, perfil):
             
             # Lista de chamados
             for ch in chamados:
-                # Import local
                 from utils import badge_status, badge_prioridade
                 
                 status_badge = badge_status(ch['status'])
                 prioridade_badge = badge_prioridade(ch['prioridade'])
                 
-                # Mostrar se foi retornado
                 retornos_txt = f" 🔄 ({ch.get('retornos', 0)}x retornado)" if ch.get('retornos', 0) > 0 else ""
                 
                 titulo = f"{status_badge} #{ch['id']} - {ch['assunto']} {prioridade_badge}{retornos_txt}"
@@ -221,7 +214,6 @@ def tela_chamados(usuario, perfil):
                         if perfil == "admin" and ch['status'] == "Em atendimento":
                             st.write("**⏱️ Controles:**")
                             
-                            # Tempo ATUAL
                             tempo_atual = ch.get("tempo_atendimento_segundos", 0) or 0
                             
                             if ch.get('status_atendimento') == "em_andamento" and ch.get('ultima_retomada'):
@@ -233,10 +225,8 @@ def tela_chamados(usuario, perfil):
                                 except:
                                     pass
                             
-                            # Exibir tempo
                             st.markdown(f"### ⏱️ {formatar_tempo(tempo_atual)}")
                             
-                            # Botões
                             if ch.get('status_atendimento') == "em_andamento":
                                 if st.button(f"⏸️ Pausar", key=f"pausar_{ch['id']}"):
                                     sucesso, mensagem = pausar_atendimento(ch['id'])
@@ -255,11 +245,10 @@ def tela_chamados(usuario, perfil):
                                     else:
                                         st.error(mensagem)
                             
-                            # Botão de concluir
                             if st.button(f"✅ Concluir", key=f"concluir_admin_{ch['id']}", type="primary"):
                                 st.session_state[f'mostrar_conclusao_{ch["id"]}'] = True
                             
-                            # IMPLEMENTAÇÃO 1: Formulário de conclusão
+                            # Formulário de conclusão
                             if st.session_state.get(f'mostrar_conclusao_{ch["id"]}', False):
                                 with st.form(key=f"form_conclusao_{ch['id']}"):
                                     st.write("**📝 Mensagem de Conclusão**")
@@ -313,7 +302,6 @@ def tela_chamados(usuario, perfil):
                                         )
                                         
                                         if sucesso:
-                                            # IMPLEMENTAÇÃO 4: Notificar cliente
                                             try:
                                                 print(f"\n📧 Tentando enviar e-mail de conclusão para chamado #{ch['id']}...")
                                                 from services.chamados_service import notificar_chamado_concluido
@@ -332,6 +320,86 @@ def tela_chamados(usuario, perfil):
                                     
                                     if cancelar:
                                         del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                        st.rerun()
+                        
+                        # ========== ADMIN: Retornar chamado ao cliente (com anexos) ==========
+                        if perfil == "admin" and ch['status'] in ['Em atendimento', 'Aguardando Finalização']:
+                            st.divider()
+                            
+                            if st.button(f"🔙 Retornar ao Cliente", key=f"btn_retornar_{ch['id']}", type="secondary"):
+                                st.session_state[f'mostrar_retorno_admin_{ch["id"]}'] = True
+                            
+                            # Formulário de retorno
+                            if st.session_state.get(f'mostrar_retorno_admin_{ch["id"]}', False):
+                                with st.form(key=f"form_retorno_admin_{ch['id']}"):
+                                    st.warning("**🔙 Retornar Chamado ao Cliente**")
+                                    
+                                    mensagem_retorno = st.text_area(
+                                        "Explique o motivo do retorno",
+                                        height=120,
+                                        placeholder="Ex: Precisamos de mais informações sobre...",
+                                        key=f"txt_retorno_admin_{ch['id']}"
+                                    )
+                                    
+                                    arquivos_retorno = st.file_uploader(
+                                        "Anexar arquivos (opcional)",
+                                        accept_multiple_files=True,
+                                        type=['pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'jpg', 'jpeg', 'png', 'gif', 'zip'],
+                                        key=f"upload_retorno_{ch['id']}"
+                                    )
+                                    
+                                    col_r1, col_r2 = st.columns(2)
+                                    
+                                    with col_r1:
+                                        enviar_retorno = st.form_submit_button("🔙 Retornar", type="secondary")
+                                    
+                                    with col_r2:
+                                        cancelar_retorno = st.form_submit_button("❌ Cancelar")
+                                    
+                                    if enviar_retorno:
+                                        if not mensagem_retorno:
+                                            st.error("⚠️ Explique o motivo do retorno")
+                                        else:
+                                            from utils import validar_arquivo, gerar_nome_arquivo_seguro
+                                            
+                                            anexos_salvos = []
+                                            
+                                            if arquivos_retorno:
+                                                if not os.path.exists("uploads/retornos"):
+                                                    os.makedirs("uploads/retornos")
+                                                
+                                                for arq in arquivos_retorno:
+                                                    valido, msg_val = validar_arquivo(arq)
+                                                    if valido:
+                                                        nome_seguro = gerar_nome_arquivo_seguro(arq.name)
+                                                        caminho = os.path.join("uploads/retornos", nome_seguro)
+                                                        
+                                                        with open(caminho, "wb") as f:
+                                                            f.write(arq.getbuffer())
+                                                        
+                                                        anexos_salvos.append({
+                                                            'nome': arq.name,
+                                                            'caminho': caminho
+                                                        })
+                                                    else:
+                                                        st.warning(f"Arquivo {arq.name}: {msg_val}")
+                                            
+                                            sucesso, msg = retornar_chamado_admin(
+                                                ch['id'], 
+                                                usuario, 
+                                                mensagem_retorno,
+                                                anexos_salvos if anexos_salvos else None
+                                            )
+                                            
+                                            if sucesso:
+                                                st.success(msg)
+                                                del st.session_state[f'mostrar_retorno_admin_{ch["id"]}']
+                                                st.rerun()
+                                            else:
+                                                st.error(msg)
+                                    
+                                    if cancelar_retorno:
+                                        del st.session_state[f'mostrar_retorno_admin_{ch["id"]}']
                                         st.rerun()
                         
                         # ========== CLIENTE: Concluir próprio chamado ==========
@@ -363,7 +431,7 @@ def tela_chamados(usuario, perfil):
                                 st.write(msg_conclusao['mensagem'])
                                 st.caption(f"Enviado em: {formatar_data_br(msg_conclusao['data_envio'])}")
                     
-                    # IMPLEMENTAÇÃO 5: Sistema de Interações
+                    # Histórico de Interações
                     st.divider()
                     st.write("**💬 Histórico de Interações:**")
                     
@@ -376,12 +444,35 @@ def tela_chamados(usuario, perfil):
                                 'abertura': '🆕',
                                 'resposta': '💬',
                                 'conclusao': '✅',
-                                'retorno': '🔄'
+                                'retorno': '🔄',
+                                'retorno_admin': '🔙'
                             }.get(inter.get('tipo', 'resposta'), '💬')
                             
                             with st.container():
                                 st.markdown(f"{autor_emoji} {tipo_badge} **{inter['autor'].title()}** - {formatar_data_br(inter['data'])}")
                                 st.write(inter['mensagem'])
+                                
+                                # Buscar e exibir anexos da interação
+                                anexos_inter = buscar_anexos_interacao(inter['id'])
+                                
+                                if anexos_inter:
+                                    st.write("**📎 Anexos:**")
+                                    for anexo_int in anexos_inter:
+                                        col_ai1, col_ai2 = st.columns([4, 1])
+                                        
+                                        with col_ai1:
+                                            st.caption(f"📄 {anexo_int['nome_arquivo']}")
+                                        
+                                        with col_ai2:
+                                            if os.path.exists(anexo_int['caminho_arquivo']):
+                                                with open(anexo_int['caminho_arquivo'], 'rb') as f:
+                                                    st.download_button(
+                                                        label="⬇️",
+                                                        data=f.read(),
+                                                        file_name=anexo_int['nome_arquivo'],
+                                                        key=f"dl_inter_{anexo_int['id']}"
+                                                    )
+                                
                                 st.caption("---")
                     
                     # Adicionar nova interação (se não estiver finalizado)
@@ -407,7 +498,6 @@ def tela_chamados(usuario, perfil):
                     if ch['status'] == 'Aguardando Finalização' and ch['usuario'] == usuario and perfil != 'admin':
                         st.divider()
                         
-                        # Criar 2 colunas para os botões
                         col_btn1, col_btn2 = st.columns(2)
                         
                         with col_btn1:
@@ -438,7 +528,6 @@ def tela_chamados(usuario, perfil):
                         with col_btn2:
                             st.write("**✅ Finalizar Chamado**")
                             
-                            # Checkbox FORA do form para atualizar em tempo real
                             confirmar = st.checkbox(
                                 "✅ Confirmo que foi resolvido",
                                 key=f"confirm_finalizar_{ch['id']}"
@@ -447,9 +536,8 @@ def tela_chamados(usuario, perfil):
                             with st.form(key=f"form_finalizar_{ch['id']}"):
                                 st.success("Use se o problema FOI resolvido.")
                                 
-                                st.write("")  # Espaçamento
+                                st.write("")
                                 
-                                # Botão sempre habilitado, validação na submissão
                                 submit_finalizar = st.form_submit_button(
                                     "✅ Finalizar Definitivamente", 
                                     type="primary", 
