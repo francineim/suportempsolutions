@@ -1,29 +1,13 @@
 # app/dashboard.py
 import streamlit as st
-import sys
-import os
-
-# Garantir que app está no path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-try:
-    import database
-    from database import (
-        buscar_estatisticas_usuario, 
-        conectar, 
-        obter_tempo_atendimento,
-        buscar_estatisticas_por_empresa,
-        buscar_chamados_com_tempo
-    )
-    import utils
-    from utils import formatar_tempo
-except ImportError as e:
-    st.error(f"Erro ao importar módulos no dashboard: {e}")
-    # Definir função vazia para não quebrar
-    def formatar_tempo(s):
-        return "00:00:00"
+from database import (
+    buscar_estatisticas_usuario, 
+    conectar, 
+    obter_tempo_atendimento,
+    buscar_estatisticas_por_empresa,
+    buscar_chamados_com_tempo,
+    formatar_tempo  # Importar do database para evitar circular import
+)
 
 def tela_dashboard():
     st.subheader("📊 Dashboard")
