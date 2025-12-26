@@ -108,7 +108,10 @@ def tela_chamados(usuario, perfil):
     col_f1, col_f2, col_f3 = st.columns(3)
     
     with col_f1:
-        filtro_status = st.selectbox("Status", ["Todos", "Novo", "Em atendimento", "Concluído"])
+        filtro_status = st.selectbox(
+            "Status", 
+            ["Todos", "Novo", "Em atendimento", "Aguardando Finalização", "Finalizado"]
+        )
     
     with col_f2:
         filtro_prioridade = st.selectbox("Prioridade", ["Todas", "Urgente", "Alta", "Média", "Baixa"])
@@ -137,11 +140,12 @@ def tela_chamados(usuario, perfil):
             st.info("📭 Nenhum chamado encontrado")
         else:
             # Estatísticas
-            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+            col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
             col_s1.metric("Total", len(chamados))
             col_s2.metric("Novos", len([c for c in chamados if c['status'] == 'Novo']))
             col_s3.metric("Em Atend.", len([c for c in chamados if c['status'] == 'Em atendimento']))
-            col_s4.metric("Concluídos", len([c for c in chamados if c['status'] == 'Concluído']))
+            col_s4.metric("Aguardando", len([c for c in chamados if c['status'] == 'Aguardando Finalização']))
+            col_s5.metric("Finalizados", len([c for c in chamados if c['status'] == 'Finalizado']))
             
             st.divider()
             
