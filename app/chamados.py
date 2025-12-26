@@ -20,10 +20,11 @@ from database import (
     buscar_interacoes_chamado,
     adicionar_interacao_chamado,
     finalizar_chamado_cliente,
-    formatar_tempo  # Importar do database para evitar circular import
+    buscar_mensagem_conclusao
 )
 
-# Imports de utils serão feitos localmente quando necessário para evitar circular import
+# CORREÇÃO: Importar formatar_tempo do utils
+from utils import formatar_tempo
 
 def formatar_data_br(data):
     """Formata data para padrão brasileiro DD/MM/YYYY HH:MM"""
@@ -351,7 +352,6 @@ def tela_chamados(usuario, perfil):
                     
                     # Mensagem de conclusão (se existir)
                     if ch['status'] in ['Aguardando Finalização', 'Finalizado']:
-                        from database import buscar_mensagem_conclusao
                         msg_conclusao = buscar_mensagem_conclusao(ch['id'])
                         
                         if msg_conclusao:
