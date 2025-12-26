@@ -25,6 +25,28 @@ from database import (
 
 # Imports de utils serão feitos localmente quando necessário para evitar circular import
 
+def formatar_data_br(data):
+    """Formata data para padrão brasileiro DD/MM/YYYY HH:MM"""
+    if data is None:
+        return "N/A"
+    
+    if isinstance(data, str):
+        try:
+            # Tentar parsear string ISO
+            data = datetime.fromisoformat(data.replace('Z', '+00:00'))
+        except:
+            try:
+                # Tentar formato padrão do SQLite
+                data = datetime.strptime(data.split('.')[0], "%Y-%m-%d %H:%M:%S")
+            except:
+                return data
+    
+    if isinstance(data, datetime):
+        return data.strftime('%d/%m/%Y %H:%M')
+    
+    return str(data)
+
+
 def tela_chamados(usuario, perfil):
     """Tela principal de gerenciamento de chamados."""
     st.subheader("📋 Meus Chamados" if perfil != "admin" else "📋 Todos os Chamados")
@@ -261,6 +283,8 @@ def tela_chamados(usuario, perfil):
                                         cancelar = st.form_submit_button("❌ Cancelar")
                                     
                                     if enviar:
+                                        from utils import validar_arquivo, gerar_nome_arquivo_seguro
+                                        
                                         arquivos_salvos = []
                                         
                                         if arquivos_upload:
