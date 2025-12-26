@@ -1,19 +1,33 @@
 # app/auth.py
 import streamlit as st
-from database import (
-    conectar, 
-    cadastrar_usuario_completo, 
-    listar_usuarios, 
-    excluir_usuario, 
-    buscar_usuario_por_id, 
-    atualizar_usuario
-)
-from utils import (
-    verificar_senha, 
-    validar_email, 
-    validar_senha_forte,
-    registrar_log
-)
+import sys
+import os
+
+# Garantir que app está no path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+try:
+    import database
+    from database import (
+        conectar, 
+        cadastrar_usuario_completo, 
+        listar_usuarios, 
+        excluir_usuario, 
+        buscar_usuario_por_id, 
+        atualizar_usuario
+    )
+    import utils
+    from utils import (
+        verificar_senha, 
+        validar_email, 
+        validar_senha_forte,
+        registrar_log
+    )
+except ImportError as e:
+    st.error(f"Erro ao importar módulos em auth: {e}")
+    st.stop()
 
 def login():
     """Sistema de login com senha hash."""
