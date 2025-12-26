@@ -106,6 +106,14 @@ def criar_tabelas():
             )
         """)
         
+        # ========== MIGRAÇÃO: Adicionar coluna retornos se não existir ==========
+        try:
+            cursor.execute("SELECT retornos FROM chamados LIMIT 1")
+        except:
+            # Coluna não existe, adicionar
+            cursor.execute("ALTER TABLE chamados ADD COLUMN retornos INTEGER DEFAULT 0")
+            print("✅ Coluna 'retornos' adicionada à tabela chamados")
+        
         # Índices
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_status ON chamados(status)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_usuario ON chamados(usuario)")
@@ -700,5 +708,53 @@ def adicionar_interacao_chamado(chamado_id, autor, mensagem):
             pass
         
         return True, "Mensagem adicionada"
+    except Exception as e:
+        return False, f"Erro: {e}"
+
+def finalizar_chamado_cliente(chamado_id, usuario):
+    """
+    Cliente finaliza um chamado concluído (não pode mais retornar).
+    
+    Args:
+        chamado_id: ID do chamado
+        usuario: Usuário que está finalizando
+    
+    Returns:
+        tuple: (sucesso, mensagem)
+    """
+    try:
+        conn = conectar()
+        cursor = conn.cursor()
+        
+        # Verificar se o chamado pertence ao usuário e está concluído
+        cursor.execute("""
+            SELECT * FROM chamados 
+            WHERE id = ? AND usuario = ? AND status = 'Concluído'
+        """, (chamado_id, usuario))
+        
+        chamado = cursor.fetchone()
+        
+        if not chamado:
+            conn.close()
+            return False, "Chamado não encontrado ou não pode ser finalizado"
+        
+        # Criar status especial "Finalizado"
+        cursor.execute("""
+            UPDATE chamados
+            SET status = 'Finalizado'
+            WHERE id = ?
+        """, (chamado_id,))
+        
+        # Registrar interação de finalização
+        cursor.execute("""
+            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo, enviar_email)
+            VALUES (?, 'cliente', 'Cliente finalizou o chamado', 'finalizacao', 0)
+        """, (chamado_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return True, "✅ Chamado finalizado com sucesso!"
+    
     except Exception as e:
         return False, f"Erro: {e}"
