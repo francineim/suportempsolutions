@@ -1,33 +1,13 @@
 # app/auth.py
 import streamlit as st
-import sys
-import os
-
-# Garantir que app está no path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-try:
-    import database
-    from database import (
-        conectar, 
-        cadastrar_usuario_completo, 
-        listar_usuarios, 
-        excluir_usuario, 
-        buscar_usuario_por_id, 
-        atualizar_usuario
-    )
-    import utils
-    from utils import (
-        verificar_senha, 
-        validar_email, 
-        validar_senha_forte,
-        registrar_log
-    )
-except ImportError as e:
-    st.error(f"Erro ao importar módulos em auth: {e}")
-    st.stop()
+from database import (
+    conectar, 
+    cadastrar_usuario_completo, 
+    listar_usuarios, 
+    excluir_usuario, 
+    buscar_usuario_por_id, 
+    atualizar_usuario
+)
 
 def login():
     """Sistema de login com senha hash."""
@@ -54,22 +34,36 @@ def login():
             user = cursor.fetchone()
             
             if user:
-                # Verificar senha com hash
+                # Verificar senha com hash (import local)
+                from utils import verificar_senha
+                
                 if verificar_senha(senha, user["senha_hash"], user["salt"]):
                     st.session_state.usuario = user["usuario"]
                     st.session_state.perfil = user["perfil"]
                     
                     # Registrar login no log
-                    registrar_log("LOGIN", user["usuario"], "Login realizado com sucesso")
+                    try:
+                        from utils import registrar_log
+                        registrar_log("LOGIN", user["usuario"], "Login realizado com sucesso")
+                    except:
+                        pass
                     
                     st.sidebar.success(f"✅ Bem-vindo, {user['usuario']}!")
                     return user["usuario"]
                 else:
                     st.sidebar.error("❌ Senha incorreta")
-                    registrar_log("LOGIN_FALHOU", usuario, "Senha incorreta")
+                    try:
+                        from utils import registrar_log
+                        registrar_log("LOGIN_FALHOU", usuario, "Senha incorreta")
+                    except:
+                        pass
             else:
                 st.sidebar.error("❌ Usuário não encontrado ou inativo")
-                registrar_log("LOGIN_FALHOU", usuario, "Usuário não encontrado")
+                try:
+                    from utils import registrar_log
+                    registrar_log("LOGIN_FALHOU", usuario, "Usuário não encontrado")
+                except:
+                    pass
                 
         except Exception as e:
             st.sidebar.error(f"❌ Erro no login: {str(e)}")
@@ -124,13 +118,15 @@ def tela_cadastro_usuario():
                     st.error("❌ As senhas não coincidem")
                     return
                 
-                # Validar força da senha
+                # Validar força da senha (import local)
+                from utils import validar_senha_forte
                 senha_valida, msg_senha = validar_senha_forte(senha)
                 if not senha_valida:
                     st.error(f"❌ {msg_senha}")
                     return
                 
-                # Validar email
+                # Validar email (import local)
+                from utils import validar_email
                 if not validar_email(email):
                     st.error("❌ Digite um e-mail válido")
                     return
@@ -139,12 +135,16 @@ def tela_cadastro_usuario():
                     if cadastrar_usuario_completo(usuario, senha, perfil, nome_completo, empresa, email):
                         st.success(f"✅ Usuário '{usuario}' cadastrado com sucesso!")
                         
-                        # Registrar no log
-                        registrar_log(
-                            "USUARIO_CADASTRADO", 
-                            st.session_state.usuario, 
-                            f"Cadastrou usuário: {usuario} ({perfil})"
-                        )
+                        # Registrar no log (import local)
+                        try:
+                            from utils import registrar_log
+                            registrar_log(
+                                "USUARIO_CADASTRADO", 
+                                st.session_state.usuario, 
+                                f"Cadastrou usuário: {usuario} ({perfil})"
+                            )
+                        except:
+                            pass
                         
                         st.balloons()
                     else:
@@ -231,11 +231,15 @@ def tela_cadastro_usuario():
                                 if st.button(f"🚫 Desativar", key=f"desativar_{user['id']}"):
                                     if excluir_usuario(user['id']):
                                         st.success("Usuário desativado!")
-                                        registrar_log(
-                                            "USUARIO_DESATIVADO",
-                                            st.session_state.usuario,
-                                            f"Desativou usuário: {user['usuario']}"
-                                        )
+                                        try:
+                                            from utils import registrar_log
+                                            registrar_log(
+                                                "USUARIO_DESATIVADO",
+                                                st.session_state.usuario,
+                                                f"Desativou usuário: {user['usuario']}"
+                                            )
+                                        except:
+                                            pass
                                         st.rerun()
                         
                         with col_a2:
