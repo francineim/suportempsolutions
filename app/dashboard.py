@@ -1,764 +1,222 @@
-# app/database.py - VERSÃO CORRIGIDA
-import sqlite3
+# app/dashboard.py
+import streamlit as st
+import sys
 import os
-from datetime import datetime
-from utils import hash_senha, formatar_tempo, parse_datetime_safe
 
-def conectar():
-    """Conecta ao banco de dados SQLite."""
-    if not os.path.exists("data"):
-        os.makedirs("data")
+# Garantir que app está no path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+try:
+    import database
+    from database import (
+        buscar_estatisticas_usuario, 
+        conectar, 
+        obter_tempo_atendimento,
+        buscar_estatisticas_por_empresa,
+        buscar_chamados_com_tempo
+    )
+    import utils
+    from utils import formatar_tempo
+except ImportError as e:
+    st.error(f"Erro ao importar módulos no dashboard: {e}")
+    # Definir função vazia para não quebrar
+    def formatar_tempo(s):
+        return "00:00:00"
+
+def tela_dashboard():
+    st.subheader("📊 Dashboard")
     
-    conn = sqlite3.connect("data/database.db", check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-def criar_tabelas():
-    """Cria todas as tabelas necessárias."""
-    conn = conectar()
-    cursor = conn.cursor()
+    usuario = st.session_state.get('usuario')
+    perfil = st.session_state.get('perfil')
     
-    try:
-        # Tabela de usuários
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                usuario TEXT UNIQUE NOT NULL,
-                senha_hash TEXT NOT NULL,
-                salt TEXT NOT NULL,
-                perfil TEXT NOT NULL,
-                nome_completo TEXT,
-                empresa TEXT,
-                email TEXT UNIQUE,
-                data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ativo INTEGER DEFAULT 1
-            )
-        """)
-        
-        # Tabela de chamados
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS chamados (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                assunto TEXT NOT NULL,
-                prioridade TEXT NOT NULL,
-                descricao TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'Novo',
-                usuario TEXT NOT NULL,
-                data_abertura TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                atendente TEXT,
-                data_inicio_atendimento TIMESTAMP,
-                data_fim_atendimento TIMESTAMP,
-                tempo_atendimento_segundos INTEGER DEFAULT 0,
-                status_atendimento TEXT DEFAULT 'nao_iniciado',
-                ultima_retomada TIMESTAMP,
-                retornos INTEGER DEFAULT 0
-            )
-        """)
-        
-        # Tabela de anexos
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS anexos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chamado_id INTEGER NOT NULL,
-                nome_arquivo TEXT NOT NULL,
-                caminho_arquivo TEXT NOT NULL,
-                data_upload TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (chamado_id) REFERENCES chamados(id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Tabela de mensagens de conclusão
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS mensagens_conclusao (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chamado_id INTEGER NOT NULL,
-                mensagem TEXT NOT NULL,
-                atendente TEXT NOT NULL,
-                data_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (chamado_id) REFERENCES chamados(id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Tabela de anexos de conclusão
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS anexos_conclusao (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                mensagem_id INTEGER NOT NULL,
-                nome_arquivo TEXT NOT NULL,
-                caminho_arquivo TEXT NOT NULL,
-                FOREIGN KEY (mensagem_id) REFERENCES mensagens_conclusao(id) ON DELETE CASCADE
-            )
-        """)
-        
-        # Tabela de interações (NOVA)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS interacoes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chamado_id INTEGER NOT NULL,
-                autor TEXT NOT NULL,
-                mensagem TEXT NOT NULL,
-                tipo TEXT DEFAULT 'resposta',
-                data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                enviar_email INTEGER DEFAULT 1,
-                email_enviado INTEGER DEFAULT 0,
-                FOREIGN KEY (chamado_id) REFERENCES chamados(id) ON DELETE CASCADE
-            )
-        """)
-        
-        # ========== MIGRAÇÃO: Adicionar coluna retornos se não existir ==========
-        try:
-            cursor.execute("SELECT retornos FROM chamados LIMIT 1")
-        except:
-            # Coluna não existe, adicionar
-            cursor.execute("ALTER TABLE chamados ADD COLUMN retornos INTEGER DEFAULT 0")
-            print("✅ Coluna 'retornos' adicionada à tabela chamados")
-        
-        # Índices
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_status ON chamados(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_chamados_usuario ON chamados(usuario)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mensagens_chamado ON mensagens_conclusao(chamado_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_interacoes_chamado ON interacoes(chamado_id)")
-        
-        # Verificar se admin existe
-        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
-        if cursor.fetchone()[0] == 0:
-            senha_hash, salt = hash_senha("sucodepao")
-            cursor.execute(
-                "INSERT INTO usuarios (usuario, senha_hash, salt, perfil, nome_completo, empresa, email) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ("admin", senha_hash, salt, "admin", "Administrador", "MP Solutions", "admin@mp.com")
-            )
-        
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"Erro ao criar tabelas: {e}")
-        conn.rollback()
-        return False
-    finally:
-        conn.close()
-
-# ========== USUÁRIOS ==========
-
-def cadastrar_usuario_completo(usuario, senha, perfil, nome_completo, empresa, email):
-    """Cadastra novo usuário."""
+    if not usuario:
+        st.error("Usuário não autenticado")
+        return
+    
+    estatisticas = buscar_estatisticas_usuario(usuario, perfil)
+    
+    # IMPLEMENTAÇÃO 5: Texto simplificado
+    if perfil != "admin":
+        st.info("📊 Seus Chamados")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    col1.metric("Total", estatisticas["total"])
+    col2.metric("Novos", estatisticas["novos"])
+    col3.metric("Em Atendimento", estatisticas["em_atendimento"])
+    
+    # Contar aguardando finalização e finalizados
     try:
         conn = conectar()
         cursor = conn.cursor()
-        
-        senha_hash, salt = hash_senha(senha)
-        
-        cursor.execute("""
-            INSERT INTO usuarios 
-            (usuario, senha_hash, salt, perfil, nome_completo, empresa, email)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (usuario, senha_hash, salt, perfil, nome_completo, empresa, email))
-        
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def listar_usuarios():
-    """Lista todos os usuários."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM usuarios ORDER BY usuario")
-        usuarios = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return usuarios
-    except:
-        return []
-
-def buscar_usuario_por_id(user_id):
-    """Busca usuário por ID."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM usuarios WHERE id = ?", (user_id,))
-        usuario = cursor.fetchone()
-        conn.close()
-        return dict(usuario) if usuario else None
-    except:
-        return None
-
-def atualizar_usuario(user_id, dados):
-    """Atualiza dados de usuário."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE usuarios
-            SET nome_completo = ?, empresa = ?, email = ?, perfil = ?
-            WHERE id = ?
-        """, (dados['nome_completo'], dados['empresa'], dados['email'], dados['perfil'], user_id))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def excluir_usuario(user_id):
-    """Desativa usuário."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE usuarios SET ativo = 0 WHERE id = ?", (user_id,))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-# ========== CHAMADOS ==========
-
-def buscar_chamados(usuario, perfil):
-    """Busca chamados baseado no perfil."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
         if perfil == "admin":
-            cursor.execute("SELECT * FROM chamados ORDER BY id DESC")
+            cursor.execute("SELECT COUNT(*) as aguardando FROM chamados WHERE status = 'Aguardando Finalização'")
+            aguardando = cursor.fetchone()['aguardando']
+            cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE status = 'Finalizado'")
+            finalizados = cursor.fetchone()['finalizados']
         else:
-            cursor.execute("SELECT * FROM chamados WHERE usuario = ? ORDER BY id DESC", (usuario,))
-        
-        chamados = [dict(row) for row in cursor.fetchall()]
+            cursor.execute("SELECT COUNT(*) as aguardando FROM chamados WHERE usuario = ? AND status = 'Aguardando Finalização'", (usuario,))
+            aguardando = cursor.fetchone()['aguardando']
+            cursor.execute("SELECT COUNT(*) as finalizados FROM chamados WHERE usuario = ? AND status = 'Finalizado'", (usuario,))
+            finalizados = cursor.fetchone()['finalizados']
         conn.close()
-        return chamados
+        
+        col4.metric("Aguardando", aguardando)
+        col5.metric("Finalizados", finalizados)
     except Exception as e:
-        print(f"Erro buscar chamados: {e}")
-        return []
-
-def buscar_descricao_chamado(chamado_id):
-    """Busca descrição de um chamado."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT descricao FROM chamados WHERE id = ?", (chamado_id,))
-        resultado = cursor.fetchone()
-        conn.close()
-        return resultado['descricao'] if resultado else ""
-    except:
-        return ""
-
-# ========== ATENDIMENTO ==========
-
-def iniciar_atendimento_admin(chamado_id, atendente):
-    """Admin inicia atendimento."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
+        col4.metric("Aguardando", 0)
+        col5.metric("Finalizados", 0)
+        print(f"Erro ao buscar contadores: {e}")
+    
+    if estatisticas["total"] > 0:
+        st.markdown("---")
+        st.subheader("📈 Distribuição")
         
-        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        import pandas as pd
         
-        cursor.execute("""
-            UPDATE chamados
-            SET status = 'Em atendimento',
-                atendente = ?,
-                data_inicio_atendimento = ?,
-                status_atendimento = 'em_andamento',
-                ultima_retomada = ?,
-                tempo_atendimento_segundos = 0
-            WHERE id = ? AND status = 'Novo'
-        """, (atendente, agora, agora, chamado_id))
-        
-        if cursor.rowcount > 0:
-            conn.commit()
-            conn.close()
-            return True, "✅ Atendimento iniciado!"
-        else:
-            conn.close()
-            return False, "❌ Erro ao iniciar"
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def pausar_atendimento(chamado_id):
-    """Pausa o cronômetro."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT tempo_atendimento_segundos, ultima_retomada
-            FROM chamados
-            WHERE id = ? AND status_atendimento = 'em_andamento'
-        """, (chamado_id,))
-        
-        dados = cursor.fetchone()
-        
-        if not dados:
-            conn.close()
-            return False, "Não está em andamento"
-        
-        tempo_atual = dados['tempo_atendimento_segundos'] or 0
-        
-        if dados['ultima_retomada']:
-            ultima_retomada = parse_datetime_safe(dados['ultima_retomada'])
-            if ultima_retomada:
-                tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
-                tempo_atual += tempo_decorrido
-        
-        cursor.execute("""
-            UPDATE chamados
-            SET status_atendimento = 'pausado',
-                tempo_atendimento_segundos = ?,
-                ultima_retomada = NULL
-            WHERE id = ?
-        """, (tempo_atual, chamado_id))
-        
-        conn.commit()
-        conn.close()
-        return True, f"⏸️ Pausado. Tempo: {formatar_tempo(tempo_atual)}"
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def retomar_atendimento(chamado_id):
-    """Retoma o cronômetro."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        cursor.execute("""
-            UPDATE chamados
-            SET status_atendimento = 'em_andamento',
-                ultima_retomada = ?
-            WHERE id = ? AND status_atendimento = 'pausado'
-        """, (agora, chamado_id))
-        
-        if cursor.rowcount > 0:
-            conn.commit()
-            conn.close()
-            return True, "▶️ Retomado!"
-        else:
-            conn.close()
-            return False, "Não está pausado"
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def concluir_atendimento_admin(chamado_id, mensagem_conclusao=None, arquivos_conclusao=None):
-    """Admin conclui o atendimento com mensagem opcional."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT tempo_atendimento_segundos, ultima_retomada, status_atendimento, atendente
-            FROM chamados
-            WHERE id = ? AND status = 'Em atendimento'
-        """, (chamado_id,))
-        
-        dados = cursor.fetchone()
-        
-        if not dados:
-            conn.close()
-            return False, "Não está em atendimento"
-        
-        tempo_final = dados['tempo_atendimento_segundos'] or 0
-        
-        if dados['status_atendimento'] == 'em_andamento' and dados['ultima_retomada']:
-            ultima_retomada = parse_datetime_safe(dados['ultima_retomada'])
-            if ultima_retomada:
-                tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
-                tempo_final += tempo_decorrido
-        
-        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # MUDANÇA: Status vai para "Aguardando Finalização" em vez de "Concluído"
-        cursor.execute("""
-            UPDATE chamados
-            SET status = 'Aguardando Finalização',
-                data_fim_atendimento = ?,
-                tempo_atendimento_segundos = ?,
-                status_atendimento = 'concluido'
-            WHERE id = ?
-        """, (agora, tempo_final, chamado_id))
-        
-        # Salvar mensagem de conclusão se fornecida
-        if mensagem_conclusao:
-            cursor.execute("""
-                INSERT INTO mensagens_conclusao (chamado_id, mensagem, atendente)
-                VALUES (?, ?, ?)
-            """, (chamado_id, mensagem_conclusao, dados['atendente']))
+        # Gráfico simplificado
+        try:
+            chart_data = pd.DataFrame({
+                'Quantidade': [
+                    estatisticas["novos"], 
+                    estatisticas["em_atendimento"], 
+                    estatisticas.get("concluidos", 0)
+                ]
+            }, index=['Novos', 'Em Atendimento', 'Aguardando/Finalizados'])
             
-            mensagem_id = cursor.lastrowid
+            st.bar_chart(chart_data)
+        except Exception as e:
+            print(f"Erro ao criar gráfico: {e}")
+    
+    # IMPLEMENTAÇÃO 2: Estatísticas avançadas para ADMIN
+    if perfil == "admin":
+        st.markdown("---")
+        
+        # Abas para diferentes visualizações
+        tab1, tab2, tab3 = st.tabs(["📊 Por Empresa", "🎫 Por Chamado", "⏱️ Chamados em Andamento"])
+        
+        # TAB 1: Estatísticas por Empresa
+        with tab1:
+            st.subheader("📊 Estatísticas por Empresa")
             
-            # Salvar anexos de conclusão se fornecidos
-            if arquivos_conclusao:
-                for arquivo_info in arquivos_conclusao:
+            try:
+                empresas = buscar_estatisticas_por_empresa()
+                
+                if empresas:
+                    for emp in empresas:
+                        with st.expander(f"🏢 {emp.get('empresa') or 'Sem empresa'}"):
+                            col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+                            
+                            col_e1.metric("Total", emp.get('total_chamados', 0))
+                            col_e2.metric("Novos", emp.get('novos', 0))
+                            col_e3.metric("Em Atend.", emp.get('em_atendimento', 0))
+                            col_e4.metric("Concluídos", emp.get('concluidos', 0))
+                            
+                            if emp.get('tempo_medio'):
+                                st.write(f"**⏱️ Tempo Médio:** {formatar_tempo(int(emp['tempo_medio']))}")
+                else:
+                    st.info("📭 Nenhuma estatística disponível")
+            except Exception as e:
+                st.error(f"Erro ao carregar estatísticas por empresa: {e}")
+        
+        # TAB 2: Estatísticas por Chamado
+        with tab2:
+            st.subheader("🎫 Chamados Concluídos - Tempo de Atendimento")
+            
+            try:
+                chamados = buscar_chamados_com_tempo()
+                
+                if chamados:
+                    # Criar DataFrame
+                    import pandas as pd
+                    df_chamados = pd.DataFrame([
+                        {
+                            'ID': f"#{ch['id']}",
+                            'Assunto': ch['assunto'][:30] + '...' if len(ch['assunto']) > 30 else ch['assunto'],
+                            'Cliente': ch['usuario'],
+                            'Empresa': ch.get('empresa') or 'N/A',
+                            'Atendente': ch.get('atendente') or 'N/A',
+                            'Tempo': formatar_tempo(ch.get('tempo_atendimento_segundos', 0)),
+                            'Abertura': ch.get('data_abertura', '')[:10] if ch.get('data_abertura') else 'N/A'
+                        }
+                        for ch in chamados
+                    ])
+                    
+                    st.dataframe(df_chamados, use_container_width=True, hide_index=True)
+                    
+                    # Estatísticas gerais
+                    st.divider()
+                    
+                    col_s1, col_s2, col_s3 = st.columns(3)
+                    
+                    tempos = [ch.get('tempo_atendimento_segundos', 0) for ch in chamados if ch.get('tempo_atendimento_segundos')]
+                    tempo_medio = sum(tempos) / len(tempos) if tempos else 0
+                    tempo_min = min(tempos) if tempos else 0
+                    tempo_max = max(tempos) if tempos else 0
+                    
+                    col_s1.metric("⏱️ Tempo Médio", formatar_tempo(int(tempo_medio)))
+                    col_s2.metric("🏃 Mais Rápido", formatar_tempo(tempo_min))
+                    col_s3.metric("🐌 Mais Lento", formatar_tempo(tempo_max))
+                else:
+                    st.info("📭 Nenhum chamado concluído ainda")
+            except Exception as e:
+                st.error(f"Erro ao carregar chamados: {e}")
+        
+        # TAB 3: Chamados em Andamento (original)
+        with tab3:
+            st.subheader("⏱️ Chamados em Atendimento")
+            
+            try:
+                # Buscar chamados em atendimento
+                conn = conectar()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT COUNT(*) as total FROM chamados WHERE status = 'Em atendimento'
+                """)
+                total_atendimento = cursor.fetchone()['total']
+                conn.close()
+                
+                if total_atendimento > 0:
+                    if st.button("🔄 Atualizar Tempos"):
+                        st.rerun()
+                    
+                    conn = conectar()
+                    cursor = conn.cursor()
                     cursor.execute("""
-                        INSERT INTO anexos_conclusao (mensagem_id, nome_arquivo, caminho_arquivo)
-                        VALUES (?, ?, ?)
-                    """, (mensagem_id, arquivo_info['nome'], arquivo_info['caminho']))
-        
-        conn.commit()
-        conn.close()
-        
-        return True, f"✅ Atendimento concluído! Tempo: {formatar_tempo(tempo_final)}"
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def cliente_concluir_chamado(chamado_id, usuario):
-    """Cliente marca como concluído."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        cursor.execute("""
-            UPDATE chamados
-            SET status = 'Concluído',
-                data_fim_atendimento = ?
-            WHERE id = ? AND usuario = ?
-        """, (agora, chamado_id, usuario))
-        
-        if cursor.rowcount > 0:
-            conn.commit()
-            conn.close()
-            return True, "✅ Marcado como concluído!"
-        else:
-            conn.close()
-            return False, "Erro"
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def obter_tempo_atendimento(chamado_id):
-    """Obtém tempo atual de atendimento."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT tempo_atendimento_segundos, ultima_retomada, status_atendimento
-            FROM chamados
-            WHERE id = ?
-        """, (chamado_id,))
-        
-        dados = cursor.fetchone()
-        conn.close()
-        
-        if not dados:
-            return 0
-        
-        tempo_atual = dados['tempo_atendimento_segundos'] or 0
-        
-        if dados['status_atendimento'] == 'em_andamento' and dados['ultima_retomada']:
-            ultima_retomada = parse_datetime_safe(dados['ultima_retomada'])
-            if ultima_retomada:
-                tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
-                tempo_atual += tempo_decorrido
-        
-        return tempo_atual
-    except:
-        return 0
-
-# ========== ANEXOS ==========
-
-def salvar_anexo(chamado_id, nome_arquivo, caminho_arquivo):
-    """Salva anexo no banco."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO anexos (chamado_id, nome_arquivo, caminho_arquivo)
-            VALUES (?, ?, ?)
-        """, (chamado_id, nome_arquivo, caminho_arquivo))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-def buscar_anexos(chamado_id):
-    """Busca anexos de um chamado."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM anexos WHERE chamado_id = ?", (chamado_id,))
-        anexos = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return anexos
-    except:
-        return []
-
-def excluir_anexo(anexo_id):
-    """Exclui um anexo."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute("SELECT caminho_arquivo FROM anexos WHERE id = ?", (anexo_id,))
-        resultado = cursor.fetchone()
-        
-        if resultado and os.path.exists(resultado['caminho_arquivo']):
-            os.remove(resultado['caminho_arquivo'])
-        
-        cursor.execute("DELETE FROM anexos WHERE id = ?", (anexo_id,))
-        conn.commit()
-        conn.close()
-        return True
-    except:
-        return False
-
-# ========== ESTATÍSTICAS ==========
-
-def buscar_estatisticas_usuario(usuario, perfil):
-    """Busca estatísticas."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        if perfil == "admin":
-            cursor.execute("SELECT COUNT(*) as total FROM chamados")
-            total = cursor.fetchone()['total']
-            cursor.execute("SELECT COUNT(*) as novos FROM chamados WHERE status = 'Novo'")
-            novos = cursor.fetchone()['novos']
-            cursor.execute("SELECT COUNT(*) as em_atendimento FROM chamados WHERE status = 'Em atendimento'")
-            em_atendimento = cursor.fetchone()['em_atendimento']
-            cursor.execute("SELECT COUNT(*) as concluidos FROM chamados WHERE status = 'Concluído'")
-            concluidos = cursor.fetchone()['concluidos']
-        else:
-            cursor.execute("SELECT COUNT(*) as total FROM chamados WHERE usuario = ?", (usuario,))
-            total = cursor.fetchone()['total']
-            cursor.execute("SELECT COUNT(*) as novos FROM chamados WHERE usuario = ? AND status = 'Novo'", (usuario,))
-            novos = cursor.fetchone()['novos']
-            cursor.execute("SELECT COUNT(*) as em_atendimento FROM chamados WHERE usuario = ? AND status = 'Em atendimento'", (usuario,))
-            em_atendimento = cursor.fetchone()['em_atendimento']
-            cursor.execute("SELECT COUNT(*) as concluidos FROM chamados WHERE usuario = ? AND status = 'Concluído'", (usuario,))
-            concluidos = cursor.fetchone()['concluidos']
-        
-        conn.close()
-        
-        return {
-            "total": total,
-            "novos": novos,
-            "em_atendimento": em_atendimento,
-            "concluidos": concluidos
-        }
-    except:
-        return {"total": 0, "novos": 0, "em_atendimento": 0, "concluidos": 0}
-
-def buscar_mensagem_conclusao(chamado_id):
-    """Busca mensagem de conclusão do chamado."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT m.*, GROUP_CONCAT(a.nome_arquivo) as arquivos
-            FROM mensagens_conclusao m
-            LEFT JOIN anexos_conclusao a ON m.id = a.mensagem_id
-            WHERE m.chamado_id = ?
-            GROUP BY m.id
-            ORDER BY m.data_envio DESC
-            LIMIT 1
-        """, (chamado_id,))
-        
-        resultado = cursor.fetchone()
-        conn.close()
-        
-        return dict(resultado) if resultado else None
-    except:
-        return None
-
-def buscar_estatisticas_por_empresa():
-    """Busca estatísticas agrupadas por empresa (ADMIN)."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT 
-                COALESCE(u.empresa, 'Sem empresa') as empresa,
-                COUNT(DISTINCT c.id) as total_chamados,
-                COUNT(DISTINCT CASE WHEN c.status = 'Novo' THEN c.id END) as novos,
-                COUNT(DISTINCT CASE WHEN c.status = 'Em atendimento' THEN c.id END) as em_atendimento,
-                COUNT(DISTINCT CASE WHEN c.status IN ('Aguardando Finalização', 'Finalizado') THEN c.id END) as concluidos,
-                AVG(CASE WHEN c.tempo_atendimento_segundos > 0 THEN c.tempo_atendimento_segundos END) as tempo_medio
-            FROM usuarios u
-            LEFT JOIN chamados c ON u.usuario = c.usuario
-            GROUP BY u.empresa
-            HAVING total_chamados > 0
-            ORDER BY total_chamados DESC
-        """)
-        
-        empresas = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return empresas
-    except Exception as e:
-        print(f"Erro em buscar_estatisticas_por_empresa: {e}")
-        return []
-
-def buscar_chamados_com_tempo():
-    """Busca chamados concluídos com tempo de atendimento (ADMIN)."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT 
-                c.id,
-                c.assunto,
-                c.usuario,
-                u.empresa,
-                c.atendente,
-                c.tempo_atendimento_segundos,
-                c.data_abertura,
-                c.data_fim_atendimento
-            FROM chamados c
-            LEFT JOIN usuarios u ON c.usuario = u.usuario
-            WHERE c.status IN ('Aguardando Finalização', 'Finalizado') 
-            AND c.tempo_atendimento_segundos > 0
-            ORDER BY c.data_fim_atendimento DESC
-            LIMIT 50
-        """)
-        
-        chamados = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return chamados
-    except Exception as e:
-        print(f"Erro em buscar_chamados_com_tempo: {e}")
-        return []
-
-def retornar_chamado(chamado_id, usuario, mensagem_retorno):
-    """Cliente retorna um chamado concluído."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        # Verificar se o chamado pertence ao usuário e está em status que permite retorno
-        cursor.execute("""
-            SELECT * FROM chamados 
-            WHERE id = ? AND usuario = ? AND status IN ('Aguardando Finalização', 'Concluído')
-        """, (chamado_id, usuario))
-        
-        if not cursor.fetchone():
-            conn.close()
-            return False, "Chamado não pode ser retornado"
-        
-        # Atualizar status do chamado
-        cursor.execute("""
-            UPDATE chamados
-            SET status = 'Em atendimento',
-                status_atendimento = 'pausado',
-                retornos = retornos + 1
-            WHERE id = ?
-        """, (chamado_id,))
-        
-        # Criar interação de retorno
-        cursor.execute("""
-            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
-            VALUES (?, 'cliente', ?, 'retorno')
-        """, (chamado_id, mensagem_retorno))
-        
-        conn.commit()
-        conn.close()
-        
-        # Notificar por e-mail
-        try:
-            from services.chamados_service import notificar_chamado_retornado
-            notificar_chamado_retornado(chamado_id, mensagem_retorno)
-        except:
-            pass
-        
-        return True, "Chamado retornado com sucesso"
-    
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def buscar_interacoes_chamado(chamado_id):
-    """Busca todas as interações de um chamado."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT * FROM interacoes
-            WHERE chamado_id = ?
-            ORDER BY data ASC
-        """, (chamado_id,))
-        
-        interacoes = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return interacoes
-    except:
-        return []
-
-def adicionar_interacao_chamado(chamado_id, autor, mensagem):
-    """Adiciona nova interação a um chamado."""
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo)
-            VALUES (?, ?, ?, 'resposta')
-        """, (chamado_id, autor, mensagem))
-        
-        interacao_id = cursor.lastrowid
-        
-        conn.commit()
-        conn.close()
-        
-        # Processar envio de e-mail
-        try:
-            from services.chamados_service import processar_envio_email_interacao
-            processar_envio_email_interacao(interacao_id)
-        except:
-            pass
-        
-        return True, "Mensagem adicionada"
-    except Exception as e:
-        return False, f"Erro: {e}"
-
-def finalizar_chamado_cliente(chamado_id, usuario):
-    """
-    Cliente finaliza um chamado (última ação, não pode mais retornar).
-    
-    Args:
-        chamado_id: ID do chamado
-        usuario: Usuário que está finalizando
-    
-    Returns:
-        tuple: (sucesso, mensagem)
-    """
-    try:
-        conn = conectar()
-        cursor = conn.cursor()
-        
-        # Verificar se o chamado pertence ao usuário e está aguardando finalização
-        cursor.execute("""
-            SELECT * FROM chamados 
-            WHERE id = ? AND usuario = ? AND status = 'Aguardando Finalização'
-        """, (chamado_id, usuario))
-        
-        chamado = cursor.fetchone()
-        
-        if not chamado:
-            conn.close()
-            return False, "Chamado não encontrado ou não pode ser finalizado"
-        
-        # Mudar para status "Finalizado"
-        cursor.execute("""
-            UPDATE chamados
-            SET status = 'Finalizado'
-            WHERE id = ?
-        """, (chamado_id,))
-        
-        # Registrar interação de finalização
-        cursor.execute("""
-            INSERT INTO interacoes (chamado_id, autor, mensagem, tipo, enviar_email)
-            VALUES (?, 'cliente', 'Cliente finalizou o chamado', 'finalizacao', 0)
-        """, (chamado_id,))
-        
-        conn.commit()
-        conn.close()
-        
-        return True, "✅ Chamado finalizado com sucesso!"
-    
-    except Exception as e:
-        return False, f"Erro: {e}"
+                        SELECT c.id, c.assunto, c.usuario, u.empresa, c.atendente, c.status_atendimento
+                        FROM chamados c
+                        LEFT JOIN usuarios u ON c.usuario = u.usuario
+                        WHERE c.status = 'Em atendimento'
+                        ORDER BY c.id DESC
+                    """)
+                    
+                    chamados = cursor.fetchall()
+                    conn.close()
+                    
+                    for ch in chamados:
+                        tempo = obter_tempo_atendimento(ch['id'])
+                        status_emoji = "⏸️" if ch.get('status_atendimento') == "pausado" else "▶️"
+                        
+                        col_a, col_b = st.columns([3, 1])
+                        
+                        with col_a:
+                            st.write(f"{status_emoji} **#{ch['id']}** - {ch['assunto']}")
+                            empresa_txt = f" ({ch.get('empresa', '')})" if ch.get('empresa') else ""
+                            st.caption(f"Cliente: {ch['usuario']}{empresa_txt} | Atendente: {ch.get('atendente', 'N/A')}")
+                        
+                        with col_b:
+                            if ch.get('status_atendimento') == 'em_andamento':
+                                st.markdown(f"### {formatar_tempo(tempo)}")
+                            else:
+                                st.write(formatar_tempo(tempo))
+                        
+                        st.divider()
+                else:
+                    st.info("📭 Nenhum chamado em atendimento")
+                    
+            except Exception as e:
+                st.error(f"Erro ao carregar chamados em atendimento: {e}")
+                import traceback
+                st.code(traceback.format_exc())
