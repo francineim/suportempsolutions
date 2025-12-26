@@ -1,4 +1,4 @@
-# app/dashboard.py - NOVA VERSÃO COM VISUALIZAÇÃO POR CLIENTE/EMPRESA
+# app/dashboard.py - VERSÃO CORRIGIDA
 import streamlit as st
 import pandas as pd
 from database import (
@@ -206,11 +206,12 @@ def tela_dashboard():
                     with col_f1:
                         filtro_empresa_user = st.selectbox(
                             "Filtrar por empresa",
-                            ["Todas"] + sorted(list(set([u['empresa'] or 'Sem empresa' for u in usuarios_stats])))
+                            ["Todas"] + sorted(list(set([u['empresa'] or 'Sem empresa' for u in usuarios_stats]))),
+                            key="filtro_empresa_usuario"
                         )
                     
                     with col_f2:
-                        busca_usuario = st.text_input("Buscar usuário", placeholder="Digite o nome...")
+                        busca_usuario = st.text_input("Buscar usuário", placeholder="Digite o nome...", key="busca_usuario")
                     
                     # Aplicar filtros
                     usuarios_filtrados = usuarios_stats
@@ -302,11 +303,12 @@ def tela_dashboard():
                     with col_tf1:
                         filtro_empresa_tempo = st.selectbox(
                             "Filtrar por empresa",
-                            ["Todas"] + sorted(list(set([ch.get('empresa') or 'Sem empresa' for ch in chamados])))
+                            ["Todas"] + sorted(list(set([ch.get('empresa') or 'Sem empresa' for ch in chamados]))),
+                            key="filtro_empresa_tempo"
                         )
                     
                     with col_tf2:
-                        limite_registros = st.selectbox("Mostrar", [10, 25, 50, 100], index=2)
+                        limite_registros = st.selectbox("Mostrar", [10, 25, 50, 100], index=2, key="limite_registros_tempo")
                     
                     # Aplicar filtro
                     chamados_filtrados = chamados
@@ -353,6 +355,8 @@ def tela_dashboard():
                     
             except Exception as e:
                 st.error(f"Erro ao carregar tempos: {e}")
+                import traceback
+                st.code(traceback.format_exc())
         
         # ========== TAB: EM ANDAMENTO ==========
         with tab_andamento:
@@ -368,7 +372,7 @@ def tela_dashboard():
                 conn.close()
                 
                 if total_atendimento > 0:
-                    if st.button("🔄 Atualizar Tempos"):
+                    if st.button("🔄 Atualizar Tempos", key="btn_atualizar_andamento"):
                         st.rerun()
                     
                     conn = conectar()
@@ -407,6 +411,8 @@ def tela_dashboard():
                     
             except Exception as e:
                 st.error(f"Erro ao carregar chamados em andamento: {e}")
+                import traceback
+                st.code(traceback.format_exc())
     
     else:
         # ========== DASHBOARD CLIENTE: SIMPLES ==========
