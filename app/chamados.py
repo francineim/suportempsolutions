@@ -309,7 +309,7 @@ def tela_chamados(usuario, perfil):
                     st.text_area("", value=descricao_completa, height=100, disabled=True, key=f"desc_{ch['id']}")
                     
                     # Mensagem de conclusão (se existir)
-                    if ch['status'] == 'Concluído':
+                    if ch['status'] in ['Aguardando Finalização', 'Finalizado']:
                         from database import buscar_mensagem_conclusao
                         msg_conclusao = buscar_mensagem_conclusao(ch['id'])
                         
@@ -343,8 +343,8 @@ def tela_chamados(usuario, perfil):
                                 st.write(inter['mensagem'])
                                 st.caption("---")
                     
-                    # Adicionar nova interação (se não estiver concluído OU se for retorno)
-                    if ch['status'] != 'Concluído':
+                    # Adicionar nova interação (se não estiver finalizado)
+                    if ch['status'] not in ['Finalizado']:
                         st.divider()
                         st.write("**💬 Adicionar Mensagem:**")
                         
@@ -362,8 +362,8 @@ def tela_chamados(usuario, perfil):
                                     else:
                                         st.error(msg)
                     
-                    # IMPLEMENTAÇÃO 5: Botão de Retorno (apenas para cliente se concluído)
-                    if ch['status'] == 'Concluído' and ch['usuario'] == usuario and perfil != 'admin':
+                    # BOTÕES PARA CLIENTE: Retornar ou Finalizar (apenas se Aguardando Finalização)
+                    if ch['status'] == 'Aguardando Finalização' and ch['usuario'] == usuario and perfil != 'admin':
                         st.divider()
                         
                         # Criar 2 colunas para os botões
@@ -373,17 +373,13 @@ def tela_chamados(usuario, perfil):
                             st.write("**🔄 Retornar Chamado**")
                             
                             with st.form(key=f"form_retorno_{ch['id']}"):
-                                st.warning("Use se o problema não foi resolvido.")
+                                st.warning("Use se o problema NÃO foi resolvido.")
                                 
                                 mensagem_retorno = st.text_area(
-                                    "Por que você está retornando?",
-                                    placeholder="Explique o motivo do retorno...",
-                                    height=100
-                                )
-                                
-                                arquivo_retorno = st.file_uploader(
-                                    "Anexar arquivo (opcional)",
-                                    key=f"arquivo_retorno_{ch['id']}"
+                                    "Por que está retornando?",
+                                    placeholder="Explique o motivo...",
+                                    height=100,
+                                    key=f"txt_retorno_{ch['id']}"
                                 )
                                 
                                 if st.form_submit_button("🔙 Retornar", type="secondary", use_container_width=True):
@@ -402,13 +398,13 @@ def tela_chamados(usuario, perfil):
                             st.write("**✅ Finalizar Chamado**")
                             
                             with st.form(key=f"form_finalizar_{ch['id']}"):
-                                st.info("Use se o problema foi resolvido definitivamente.")
+                                st.success("Use se o problema FOI resolvido.")
                                 
                                 st.write("")  # Espaçamento
                                 st.write("")  # Espaçamento
                                 
                                 confirmar = st.checkbox(
-                                    "Confirmo que o problema foi resolvido",
+                                    "✅ Confirmo que foi resolvido",
                                     key=f"confirm_finalizar_{ch['id']}"
                                 )
                                 
