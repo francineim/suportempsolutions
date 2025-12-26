@@ -1,47 +1,29 @@
 # app/chamados.py - VERSÃO FINAL COMPLETA
 import streamlit as st
-import sys
 import os
 from datetime import datetime
 
-# Garantir que app está no path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
+from database import (
+    conectar, 
+    buscar_chamados,
+    buscar_descricao_chamado,
+    iniciar_atendimento_admin,
+    pausar_atendimento,
+    retomar_atendimento,
+    concluir_atendimento_admin,
+    cliente_concluir_chamado,
+    obter_tempo_atendimento,
+    salvar_anexo,
+    buscar_anexos,
+    excluir_anexo,
+    retornar_chamado,
+    buscar_interacoes_chamado,
+    adicionar_interacao_chamado,
+    finalizar_chamado_cliente,
+    formatar_tempo  # Importar do database para evitar circular import
+)
 
-try:
-    import database
-    from database import (
-        conectar, 
-        buscar_chamados,
-        buscar_descricao_chamado,
-        iniciar_atendimento_admin,
-        pausar_atendimento,
-        retomar_atendimento,
-        concluir_atendimento_admin,
-        cliente_concluir_chamado,
-        obter_tempo_atendimento,
-        salvar_anexo,
-        buscar_anexos,
-        excluir_anexo,
-        retornar_chamado,
-        buscar_interacoes_chamado,
-        adicionar_interacao_chamado,
-        finalizar_chamado_cliente
-    )
-    import utils
-    from utils import (
-        validar_arquivo,
-        gerar_nome_arquivo_seguro,
-        formatar_tempo,
-        badge_status,
-        badge_prioridade,
-        formatar_data_br,
-        sanitizar_texto
-    )
-except ImportError as e:
-    st.error(f"Erro ao importar módulos: {e}")
-    st.stop()
+# Imports de utils serão feitos localmente quando necessário para evitar circular import
 
 def tela_chamados(usuario, perfil):
     """Tela principal de gerenciamento de chamados."""
@@ -66,6 +48,9 @@ def tela_chamados(usuario, perfil):
                 if not assunto or not descricao:
                     st.error("⚠️ Preencha o assunto e a descrição")
                 else:
+                    # Import local para evitar circular import
+                    from utils import sanitizar_texto, validar_arquivo, gerar_nome_arquivo_seguro
+                    
                     assunto_limpo = sanitizar_texto(assunto)
                     descricao_limpa = sanitizar_texto(descricao)
                     
@@ -172,6 +157,9 @@ def tela_chamados(usuario, perfil):
             
             # Lista de chamados
             for ch in chamados:
+                # Import local
+                from utils import badge_status, badge_prioridade
+                
                 status_badge = badge_status(ch['status'])
                 prioridade_badge = badge_prioridade(ch['prioridade'])
                 
