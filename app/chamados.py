@@ -134,15 +134,20 @@ def tela_chamados(usuario, perfil):
     with col_f1:
         filtro_status = st.selectbox(
             "Status", 
-            ["Todos", "Novo", "Em atendimento", "Aguardando Finalização", "Aguardando Cliente", "Finalizado"]
+            ["Todos", "Novo", "Em atendimento", "Aguardando Finalização", "Aguardando Cliente", "Finalizado"],
+            key="filtro_status_chamados"
         )
     
     with col_f2:
-        filtro_prioridade = st.selectbox("Prioridade", ["Todas", "Urgente", "Alta", "Média", "Baixa"])
+        filtro_prioridade = st.selectbox(
+            "Prioridade", 
+            ["Todas", "Urgente", "Alta", "Média", "Baixa"],
+            key="filtro_prioridade_chamados"
+        )
     
     with col_f3:
         if perfil == "admin":
-            filtro_usuario = st.text_input("Filtrar por usuário")
+            filtro_usuario = st.text_input("Filtrar por usuário", key="filtro_usuario_chamados")
         else:
             filtro_usuario = None
     
