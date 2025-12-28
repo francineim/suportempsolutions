@@ -1,4 +1,8 @@
-# app/chamados.py - VERSÃO COMPLETA
+# app/chamados.py
+"""
+Tela de Gerenciamento de Chamados
+"""
+
 import streamlit as st
 import os
 from datetime import datetime
@@ -22,10 +26,12 @@ from database import (
     finalizar_chamado_cliente,
     buscar_mensagem_conclusao,
     buscar_anexos_interacao,
-    retornar_chamado_admin
+    retornar_chamado_admin,
+    criar_chamado,
+    registrar_download
 )
 
-from utils import formatar_tempo
+from utils import formatar_tempo, badge_status, badge_prioridade, agora_brasilia_str
 
 def formatar_data_br(data):
     """Formata data para padrão brasileiro DD/MM/YYYY HH:MM"""
@@ -76,52 +82,47 @@ def tela_chamados(usuario, perfil):
                     descricao_limpa = sanitizar_texto(descricao)
                     
                     try:
-                        conn = conectar()
-                        cursor = conn.cursor()
+                        # Criar chamado
+                        chamado_id = criar_chamado(assunto_limpo, prioridade, descricao_limpa, usuario)
                         
-                        cursor.execute("""
-                            INSERT INTO chamados
-                            (assunto, prioridade, descricao, status, usuario)
-                            VALUES (?, ?, ?, 'Novo', ?)
-                        """, (assunto_limpo, prioridade, descricao_limpa, usuario))
-                        
-                        conn.commit()
-                        chamado_id = cursor.lastrowid
-                        conn.close()
-                        
-                        if arquivo is not None:
-                            valido, msg = validar_arquivo(arquivo)
-                            if valido:
-                                if not os.path.exists("uploads"):
-                                    os.makedirs("uploads")
-                                
-                                nome_seguro = gerar_nome_arquivo_seguro(arquivo.name)
-                                caminho = os.path.join("uploads", nome_seguro)
-                                
-                                with open(caminho, "wb") as f:
-                                    f.write(arquivo.getbuffer())
-                                
-                                salvar_anexo(chamado_id, arquivo.name, caminho)
-                                st.success(f"✅ Arquivo anexado!")
-                        
-                        try:
-                            print(f"\n📧 Tentando enviar e-mail para chamado #{chamado_id}...")
-                            from services.chamados_service import notificar_novo_chamado, criar_interacao
+                        if chamado_id:
+                            # Processar anexo se houver
+                            if arquivo is not None:
+                                valido, msg = validar_arquivo(arquivo)
+                                if valido:
+                                    if not os.path.exists("uploads"):
+                                        os.makedirs("uploads")
+                                    
+                                    nome_seguro = gerar_nome_arquivo_seguro(arquivo.name)
+                                    caminho = os.path.join("uploads", nome_seguro)
+                                    
+                                    with open(caminho, "wb") as f:
+                                        f.write(arquivo.getbuffer())
+                                    
+                                    salvar_anexo(chamado_id, arquivo.name, caminho, arquivo.size)
+                                    st.success(f"✅ Arquivo anexado!")
                             
-                            criar_interacao(chamado_id, 'cliente', descricao_limpa, 'abertura')
-                            print(f"   ✅ Interação criada")
+                            # Enviar notificações por e-mail
+                            try:
+                                print(f"\n📧 Tentando enviar e-mail para chamado #{chamado_id}...")
+                                from services.chamados_service import notificar_novo_chamado, criar_interacao
+                                
+                                criar_interacao(chamado_id, 'cliente', descricao_limpa, 'abertura')
+                                print(f"   ✅ Interação criada")
+                                
+                                notificar_novo_chamado(chamado_id)
+                                print(f"   ✅ Notificação enviada")
+                                
+                            except Exception as e:
+                                print(f"   ❌ Erro ao enviar e-mail: {e}")
+                                import traceback
+                                traceback.print_exc()
                             
-                            notificar_novo_chamado(chamado_id)
-                            print(f"   ✅ Notificação enviada")
-                            
-                        except Exception as e:
-                            print(f"   ❌ Erro ao enviar e-mail: {e}")
-                            import traceback
-                            traceback.print_exc()
-                        
-                        st.success(f"✅ Chamado #{chamado_id} aberto com sucesso!")
-                        st.balloons()
-                        st.rerun()
+                            st.success(f"✅ Chamado #{chamado_id} aberto com sucesso!")
+                            st.balloons()
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao criar chamado")
                         
                     except Exception as e:
                         st.error(f"❌ Erro: {str(e)}")
@@ -169,274 +170,185 @@ def tela_chamados(usuario, perfil):
             st.info("📭 Nenhum chamado encontrado")
         else:
             # Estatísticas
-            col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
-            col_s1.metric("Total", len(chamados))
-            col_s2.metric("Novos", len([c for c in chamados if c['status'] == 'Novo']))
-            col_s3.metric("Em Atend.", len([c for c in chamados if c['status'] == 'Em atendimento']))
-            col_s4.metric("Aguardando", len([c for c in chamados if c['status'] == 'Aguardando Finalização']))
-            col_s5.metric("Finalizados", len([c for c in chamados if c['status'] == 'Finalizado']))
+            st.caption(f"📊 Total: {len(chamados)} chamado(s)")
             
-            st.divider()
-            
-            # Lista de chamados
+            # Exibir chamados
             for ch in chamados:
-                from utils import badge_status, badge_prioridade
-                
                 status_badge = badge_status(ch['status'])
                 prioridade_badge = badge_prioridade(ch['prioridade'])
                 
-                retornos_txt = f" 🔄 ({ch.get('retornos', 0)}x retornado)" if ch.get('retornos', 0) > 0 else ""
+                # Título do expander
+                titulo = f"{status_badge} {prioridade_badge} **#{ch['id']}** - {ch['assunto'][:50]}..."
                 
-                titulo = f"{status_badge} #{ch['id']} - {ch['assunto']} {prioridade_badge}{retornos_txt}"
-                
-                with st.expander(titulo):
-                    col1, col2 = st.columns([2, 1])
+                with st.expander(titulo, expanded=False):
+                    # Info do chamado
+                    col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        st.write(f"**📌 Prioridade:** {prioridade_badge} {ch['prioridade']}")
-                        st.write(f"**📊 Status:** {status_badge} {ch['status']}")
-                        st.write(f"**👤 Usuário:** {ch['usuario']}")
-                        st.write(f"**📅 Abertura:** {formatar_data_br(ch['data_abertura'])}")
-                        
-                        if ch['atendente']:
-                            st.write(f"**👨‍💼 Atendente:** {ch['atendente']}")
-                        
-                        if ch.get('retornos', 0) > 0:
-                            st.write(f"**🔄 Retornos:** {ch['retornos']}x")
+                        st.write(f"**ID:** #{ch['id']}")
+                        st.write(f"**Status:** {ch['status']}")
+                        st.write(f"**Prioridade:** {ch['prioridade']}")
                     
                     with col2:
-                        # ========== ADMIN: Iniciar atendimento ==========
-                        if perfil == "admin" and ch['status'] == "Novo":
-                            if st.button(f"🚀 Iniciar", key=f"iniciar_{ch['id']}", type="primary"):
-                                sucesso, mensagem = iniciar_atendimento_admin(ch['id'], usuario)
-                                if sucesso:
-                                    st.success(mensagem)
-                                    st.rerun()
-                                else:
-                                    st.error(mensagem)
+                        st.write(f"**Usuário:** {ch['usuario']}")
+                        st.write(f"**Atendente:** {ch.get('atendente', 'N/A')}")
+                        st.write(f"**Retornos:** {ch.get('retornos', 0)}")
+                    
+                    with col3:
+                        st.write(f"**Abertura:** {formatar_data_br(ch['data_abertura'])}")
+                        st.write(f"**Tempo:** {formatar_tempo(obter_tempo_atendimento(ch['id']))}")
+                        if ch.get('data_fim_atendimento'):
+                            st.write(f"**Conclusão:** {formatar_data_br(ch['data_fim_atendimento'])}")
+                    
+                    st.divider()
+                    
+                    # Descrição
+                    st.write("**📝 Descrição:**")
+                    descricao = buscar_descricao_chamado(ch['id'])
+                    st.text_area("", value=descricao, disabled=True, height=100, key=f"desc_{ch['id']}", label_visibility="collapsed")
+                    
+                    # ========== AÇÕES DO ADMIN ==========
+                    if perfil == "admin":
+                        st.divider()
+                        st.write("**🔧 Ações do Atendente:**")
                         
-                        # ========== ADMIN: Controles durante atendimento ==========
-                        if perfil == "admin" and ch['status'] == "Em atendimento":
-                            st.write("**⏱️ Controles:**")
-                            
-                            tempo_atual = ch.get("tempo_atendimento_segundos", 0) or 0
-                            
-                            if ch.get('status_atendimento') == "em_andamento" and ch.get('ultima_retomada'):
-                                try:
-                                    ultima_retomada_str = str(ch['ultima_retomada']).split('.')[0]
-                                    ultima_retomada = datetime.strptime(ultima_retomada_str, "%Y-%m-%d %H:%M:%S")
-                                    tempo_decorrido = int((datetime.now() - ultima_retomada).total_seconds())
-                                    tempo_atual += tempo_decorrido
-                                except:
-                                    pass
-                            
-                            st.markdown(f"### ⏱️ {formatar_tempo(tempo_atual)}")
-                            
-                            if ch.get('status_atendimento') == "em_andamento":
-                                if st.button(f"⏸️ Pausar", key=f"pausar_{ch['id']}"):
-                                    sucesso, mensagem = pausar_atendimento(ch['id'])
+                        col_a1, col_a2, col_a3, col_a4 = st.columns(4)
+                        
+                        # Iniciar atendimento
+                        if ch['status'] == 'Novo':
+                            with col_a1:
+                                if st.button("▶️ Iniciar", key=f"iniciar_{ch['id']}", use_container_width=True):
+                                    sucesso, msg = iniciar_atendimento_admin(ch['id'], usuario)
                                     if sucesso:
-                                        st.success(mensagem)
+                                        st.success(msg)
+                                        
+                                        # Criar interação
+                                        try:
+                                            from services.chamados_service import criar_interacao
+                                            criar_interacao(ch['id'], 'atendente', 'Atendimento iniciado', 'inicio')
+                                        except:
+                                            pass
+                                        
                                         st.rerun()
                                     else:
-                                        st.error(mensagem)
-                            
-                            elif ch.get('status_atendimento') == "pausado":
-                                if st.button(f"▶️ Retomar", key=f"retomar_{ch['id']}"):
-                                    sucesso, mensagem = retomar_atendimento(ch['id'])
-                                    if sucesso:
-                                        st.success(mensagem)
-                                        st.rerun()
-                                    else:
-                                        st.error(mensagem)
-                            
-                            if st.button(f"✅ Concluir", key=f"concluir_admin_{ch['id']}", type="primary"):
-                                st.session_state[f'mostrar_conclusao_{ch["id"]}'] = True
-                            
-                            # Formulário de conclusão
-                            if st.session_state.get(f'mostrar_conclusao_{ch["id"]}', False):
-                                with st.form(key=f"form_conclusao_{ch['id']}"):
-                                    st.write("**📝 Mensagem de Conclusão**")
-                                    mensagem = st.text_area(
-                                        "Mensagem para o cliente",
-                                        height=150,
-                                        placeholder="Descreva o que foi feito, orientações, etc."
-                                    )
-                                    
-                                    arquivos_upload = st.file_uploader(
-                                        "Anexar arquivos (opcional)",
-                                        accept_multiple_files=True,
-                                        key=f"upload_conclusao_{ch['id']}"
-                                    )
-                                    
-                                    col_btn1, col_btn2 = st.columns(2)
-                                    
-                                    with col_btn1:
-                                        enviar = st.form_submit_button("✅ Concluir", type="primary")
-                                    
-                                    with col_btn2:
-                                        cancelar = st.form_submit_button("❌ Cancelar")
-                                    
-                                    if enviar:
-                                        from utils import validar_arquivo, gerar_nome_arquivo_seguro
-                                        
-                                        arquivos_salvos = []
-                                        
-                                        if arquivos_upload:
-                                            if not os.path.exists("uploads/conclusoes"):
-                                                os.makedirs("uploads/conclusoes")
-                                            
-                                            for arq in arquivos_upload:
-                                                valido, msg_val = validar_arquivo(arq)
-                                                if valido:
-                                                    nome_seguro = gerar_nome_arquivo_seguro(arq.name)
-                                                    caminho = os.path.join("uploads/conclusoes", nome_seguro)
-                                                    
-                                                    with open(caminho, "wb") as f:
-                                                        f.write(arq.getbuffer())
-                                                    
-                                                    arquivos_salvos.append({
-                                                        'nome': arq.name,
-                                                        'caminho': caminho
-                                                    })
-                                        
-                                        sucesso, msg_resultado = concluir_atendimento_admin(
-                                            ch['id'], 
-                                            mensagem if mensagem else None,
-                                            arquivos_salvos if arquivos_salvos else None
-                                        )
-                                        
+                                        st.error(msg)
+                        
+                        # Pausar/Retomar
+                        if ch['status'] == 'Em atendimento':
+                            with col_a1:
+                                if ch.get('status_atendimento') == 'em_andamento':
+                                    if st.button("⏸️ Pausar", key=f"pausar_{ch['id']}", use_container_width=True):
+                                        sucesso, msg = pausar_atendimento(ch['id'])
                                         if sucesso:
-                                            try:
-                                                print(f"\n📧 Tentando enviar e-mail de conclusão para chamado #{ch['id']}...")
-                                                from services.chamados_service import notificar_chamado_concluido
-                                                notificar_chamado_concluido(ch['id'], mensagem)
-                                                print(f"   ✅ E-mail de conclusão enviado")
-                                            except Exception as e:
-                                                print(f"   ❌ Erro ao enviar e-mail: {e}")
-                                                import traceback
-                                                traceback.print_exc()
-                                            
-                                            st.success(msg_resultado)
-                                            del st.session_state[f'mostrar_conclusao_{ch["id"]}']
+                                            st.success(msg)
                                             st.rerun()
                                         else:
-                                            st.error(msg_resultado)
-                                    
-                                    if cancelar:
-                                        del st.session_state[f'mostrar_conclusao_{ch["id"]}']
-                                        st.rerun()
-                        
-                        # ========== ADMIN: Retornar chamado ao cliente (com anexos) ==========
-                        if perfil == "admin" and ch['status'] in ['Em atendimento', 'Aguardando Finalização']:
-                            st.divider()
-                            
-                            if st.button(f"🔙 Retornar ao Cliente", key=f"btn_retornar_{ch['id']}", type="secondary"):
-                                st.session_state[f'mostrar_retorno_admin_{ch["id"]}'] = True
-                            
-                            # Formulário de retorno
-                            if st.session_state.get(f'mostrar_retorno_admin_{ch["id"]}', False):
-                                with st.form(key=f"form_retorno_admin_{ch['id']}"):
-                                    st.warning("**🔙 Retornar Chamado ao Cliente**")
-                                    
-                                    mensagem_retorno = st.text_area(
-                                        "Explique o motivo do retorno",
-                                        height=120,
-                                        placeholder="Ex: Precisamos de mais informações sobre...",
-                                        key=f"txt_retorno_admin_{ch['id']}"
-                                    )
-                                    
-                                    arquivos_retorno = st.file_uploader(
-                                        "Anexar arquivos (opcional)",
-                                        accept_multiple_files=True,
-                                        type=['pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'jpg', 'jpeg', 'png', 'gif', 'zip'],
-                                        key=f"upload_retorno_{ch['id']}"
-                                    )
-                                    
-                                    col_r1, col_r2 = st.columns(2)
-                                    
-                                    with col_r1:
-                                        enviar_retorno = st.form_submit_button("🔙 Retornar", type="secondary")
-                                    
-                                    with col_r2:
-                                        cancelar_retorno = st.form_submit_button("❌ Cancelar")
-                                    
-                                    if enviar_retorno:
-                                        if not mensagem_retorno:
-                                            st.error("⚠️ Explique o motivo do retorno")
+                                            st.error(msg)
+                                else:
+                                    if st.button("▶️ Retomar", key=f"retomar_{ch['id']}", use_container_width=True):
+                                        sucesso, msg = retomar_atendimento(ch['id'])
+                                        if sucesso:
+                                            st.success(msg)
+                                            st.rerun()
                                         else:
-                                            from utils import validar_arquivo, gerar_nome_arquivo_seguro
+                                            st.error(msg)
+                            
+                            # Concluir
+                            with col_a2:
+                                with st.popover("✅ Concluir"):
+                                    st.write("**Mensagem de conclusão:**")
+                                    msg_conclusao = st.text_area(
+                                        "Mensagem",
+                                        placeholder="Descreva o que foi feito...",
+                                        key=f"msg_conclusao_{ch['id']}",
+                                        label_visibility="collapsed"
+                                    )
+                                    
+                                    # Anexo de conclusão
+                                    arquivo_conclusao = st.file_uploader(
+                                        "Anexar arquivo",
+                                        key=f"anexo_conclusao_{ch['id']}",
+                                        type=['pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'jpg', 'jpeg', 'png']
+                                    )
+                                    
+                                    if st.button("✅ Confirmar Conclusão", key=f"confirmar_conclusao_{ch['id']}", type="primary"):
+                                        # Processar anexo
+                                        arquivos_conclusao = None
+                                        if arquivo_conclusao:
+                                            from utils import gerar_nome_arquivo_seguro
+                                            if not os.path.exists("uploads"):
+                                                os.makedirs("uploads")
+                                            nome_seguro = gerar_nome_arquivo_seguro(arquivo_conclusao.name)
+                                            caminho = os.path.join("uploads", nome_seguro)
+                                            with open(caminho, "wb") as f:
+                                                f.write(arquivo_conclusao.getbuffer())
+                                            arquivos_conclusao = [{'nome': arquivo_conclusao.name, 'caminho': caminho}]
+                                        
+                                        sucesso, msg = concluir_atendimento_admin(ch['id'], msg_conclusao, arquivos_conclusao)
+                                        if sucesso:
+                                            st.success(msg)
                                             
-                                            anexos_salvos = []
+                                            # Notificar cliente
+                                            try:
+                                                from services.chamados_service import notificar_chamado_concluido
+                                                notificar_chamado_concluido(ch['id'], msg_conclusao)
+                                            except:
+                                                pass
                                             
-                                            if arquivos_retorno:
-                                                if not os.path.exists("uploads/retornos"):
-                                                    os.makedirs("uploads/retornos")
-                                                
-                                                for arq in arquivos_retorno:
-                                                    valido, msg_val = validar_arquivo(arq)
-                                                    if valido:
-                                                        nome_seguro = gerar_nome_arquivo_seguro(arq.name)
-                                                        caminho = os.path.join("uploads/retornos", nome_seguro)
-                                                        
-                                                        with open(caminho, "wb") as f:
-                                                            f.write(arq.getbuffer())
-                                                        
-                                                        anexos_salvos.append({
-                                                            'nome': arq.name,
-                                                            'caminho': caminho
-                                                        })
-                                                    else:
-                                                        st.warning(f"Arquivo {arq.name}: {msg_val}")
+                                            st.rerun()
+                                        else:
+                                            st.error(msg)
+                            
+                            # Retornar ao cliente
+                            with col_a3:
+                                with st.popover("🔄 Retornar"):
+                                    st.write("**Retornar ao cliente:**")
+                                    msg_retorno_admin = st.text_area(
+                                        "Mensagem",
+                                        placeholder="Informe o que precisa do cliente...",
+                                        key=f"msg_retorno_admin_{ch['id']}",
+                                        label_visibility="collapsed"
+                                    )
+                                    
+                                    # Anexo de retorno
+                                    arquivo_retorno = st.file_uploader(
+                                        "Anexar arquivo",
+                                        key=f"anexo_retorno_{ch['id']}",
+                                        type=['pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'jpg', 'jpeg', 'png']
+                                    )
+                                    
+                                    if st.button("🔄 Enviar para Cliente", key=f"enviar_retorno_{ch['id']}"):
+                                        if not msg_retorno_admin:
+                                            st.error("Informe o motivo do retorno")
+                                        else:
+                                            # Processar anexo
+                                            arquivos = None
+                                            if arquivo_retorno:
+                                                from utils import gerar_nome_arquivo_seguro
+                                                if not os.path.exists("uploads"):
+                                                    os.makedirs("uploads")
+                                                nome_seguro = gerar_nome_arquivo_seguro(arquivo_retorno.name)
+                                                caminho = os.path.join("uploads", nome_seguro)
+                                                with open(caminho, "wb") as f:
+                                                    f.write(arquivo_retorno.getbuffer())
+                                                arquivos = [{'nome': arquivo_retorno.name, 'caminho': caminho}]
                                             
-                                            sucesso, msg = retornar_chamado_admin(
-                                                ch['id'], 
-                                                usuario, 
-                                                mensagem_retorno,
-                                                anexos_salvos if anexos_salvos else None
-                                            )
-                                            
+                                            sucesso, msg = retornar_chamado_admin(ch['id'], usuario, msg_retorno_admin, arquivos)
                                             if sucesso:
                                                 st.success(msg)
-                                                del st.session_state[f'mostrar_retorno_admin_{ch["id"]}']
+                                                
+                                                # Notificar cliente
+                                                try:
+                                                    from services.chamados_service import notificar_retorno_admin
+                                                    notificar_retorno_admin(ch['id'], msg_retorno_admin)
+                                                except:
+                                                    pass
+                                                
                                                 st.rerun()
                                             else:
                                                 st.error(msg)
-                                    
-                                    if cancelar_retorno:
-                                        del st.session_state[f'mostrar_retorno_admin_{ch["id"]}']
-                                        st.rerun()
-                        
-                        # ========== CLIENTE: Concluir próprio chamado ==========
-                        if perfil != "admin" and ch['usuario'] == usuario and ch['status'] == "Em atendimento":
-                            if st.button(f"✅ Resolvido", key=f"concluir_cliente_{ch['id']}", type="primary"):
-                                sucesso, mensagem = cliente_concluir_chamado(ch['id'], usuario)
-                                if sucesso:
-                                    st.success(mensagem)
-                                    st.rerun()
-                                else:
-                                    st.error(mensagem)
                     
-                    # Descrição
-                    st.divider()
-                    st.write("**📋 Descrição:**")
-                    descricao_completa = buscar_descricao_chamado(ch['id'])
-                    st.text_area("", value=descricao_completa, height=100, disabled=True, key=f"desc_{ch['id']}")
-                    
-                    # Mensagem de conclusão (se existir)
-                    if ch['status'] in ['Aguardando Finalização', 'Finalizado']:
-                        msg_conclusao = buscar_mensagem_conclusao(ch['id'])
-                        
-                        if msg_conclusao:
-                            st.divider()
-                            st.write("**✅ Mensagem de Conclusão:**")
-                            
-                            with st.container():
-                                st.info(f"**Atendente:** {msg_conclusao['atendente']}")
-                                st.write(msg_conclusao['mensagem'])
-                                st.caption(f"Enviado em: {formatar_data_br(msg_conclusao['data_envio'])}")
-                    
-                    # Histórico de Interações
+                    # ========== INTERAÇÕES ==========
                     st.divider()
                     st.write("**💬 Histórico de Interações:**")
                     
@@ -444,64 +356,69 @@ def tela_chamados(usuario, perfil):
                     
                     if interacoes:
                         for inter in interacoes:
-                            autor_emoji = "👤" if inter['autor'] == 'cliente' else "👨‍💼"
-                            tipo_badge = {
-                                'abertura': '🆕',
-                                'resposta': '💬',
-                                'conclusao': '✅',
-                                'retorno': '🔄',
-                                'retorno_admin': '🔙'
-                            }.get(inter.get('tipo', 'resposta'), '💬')
+                            autor_icon = "👤" if inter['autor'] == 'cliente' else "🛠️"
+                            autor_nome = "Cliente" if inter['autor'] == 'cliente' else "Atendente"
                             
-                            with st.container():
-                                st.markdown(f"{autor_emoji} {tipo_badge} **{inter['autor'].title()}** - {formatar_data_br(inter['data'])}")
-                                st.write(inter['mensagem'])
-                                
-                                # Buscar e exibir anexos da interação
-                                anexos_inter = buscar_anexos_interacao(inter['id'])
-                                
-                                if anexos_inter:
-                                    st.write("**📎 Anexos:**")
-                                    for anexo_int in anexos_inter:
-                                        col_ai1, col_ai2 = st.columns([4, 1])
-                                        
-                                        with col_ai1:
-                                            st.caption(f"📄 {anexo_int['nome_arquivo']}")
-                                        
-                                        with col_ai2:
-                                            if os.path.exists(anexo_int['caminho_arquivo']):
-                                                with open(anexo_int['caminho_arquivo'], 'rb') as f:
-                                                    st.download_button(
-                                                        label="⬇️",
-                                                        data=f.read(),
-                                                        file_name=anexo_int['nome_arquivo'],
-                                                        key=f"dl_inter_{anexo_int['id']}"
-                                                    )
-                                
-                                st.caption("---")
+                            st.markdown(f"""
+                            <div style='background: {"#e3f2fd" if inter["autor"] == "atendente" else "#f5f5f5"}; 
+                                        padding: 10px; margin: 5px 0; border-radius: 8px;
+                                        border-left: 3px solid {"#1976d2" if inter["autor"] == "atendente" else "#9e9e9e"};'>
+                                <strong>{autor_icon} {autor_nome}</strong> - <small>{formatar_data_br(inter['data'])}</small>
+                                <p style='margin: 5px 0 0 0;'>{inter['mensagem']}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Anexos da interação
+                            anexos_inter = buscar_anexos_interacao(inter['id'])
+                            if anexos_inter:
+                                for anexo in anexos_inter:
+                                    if os.path.exists(anexo['caminho_arquivo']):
+                                        with open(anexo['caminho_arquivo'], 'rb') as f:
+                                            st.download_button(
+                                                f"📎 {anexo['nome_arquivo']}",
+                                                f.read(),
+                                                anexo['nome_arquivo'],
+                                                key=f"dl_inter_{inter['id']}_{anexo['id']}"
+                                            )
+                    else:
+                        st.info("Sem interações registradas")
                     
-                    # Adicionar nova interação (se não estiver finalizado)
-                    if ch['status'] not in ['Finalizado']:
-                        st.divider()
-                        st.write("**💬 Adicionar Mensagem:**")
-                        
-                        with st.form(key=f"form_interacao_{ch['id']}"):
-                            nova_mensagem = st.text_area("Sua mensagem", key=f"msg_{ch['id']}")
+                    # Nova mensagem
+                    if ch['status'] not in ['Finalizado', 'Cancelado']:
+                        with st.form(key=f"form_msg_{ch['id']}"):
+                            nova_mensagem = st.text_area(
+                                "Nova mensagem",
+                                placeholder="Digite sua mensagem...",
+                                key=f"nova_msg_{ch['id']}"
+                            )
                             
-                            if st.form_submit_button("📤 Enviar"):
+                            if st.form_submit_button("📤 Enviar Mensagem"):
                                 if nova_mensagem:
                                     autor_tipo = 'cliente' if perfil != 'admin' else 'atendente'
                                     sucesso, msg = adicionar_interacao_chamado(ch['id'], autor_tipo, nova_mensagem)
                                     
                                     if sucesso:
                                         st.success("Mensagem enviada!")
+                                        
+                                        # Notificar
+                                        try:
+                                            from services.chamados_service import criar_interacao
+                                            # Já foi criada acima, só precisa notificar
+                                        except:
+                                            pass
+                                        
                                         st.rerun()
                                     else:
                                         st.error(msg)
                     
-                    # BOTÕES PARA CLIENTE: Retornar ou Finalizar (apenas se Aguardando Finalização)
+                    # ========== AÇÕES DO CLIENTE ==========
                     if ch['status'] == 'Aguardando Finalização' and ch['usuario'] == usuario and perfil != 'admin':
                         st.divider()
+                        
+                        # Mensagem de conclusão
+                        msg_conclusao = buscar_mensagem_conclusao(ch['id'])
+                        if msg_conclusao:
+                            st.info(f"**Mensagem do Atendente:** {msg_conclusao.get('mensagem', '')}")
                         
                         col_btn1, col_btn2 = st.columns(2)
                         
@@ -526,6 +443,14 @@ def tela_chamados(usuario, perfil):
                                         
                                         if sucesso:
                                             st.success(msg)
+                                            
+                                            # Notificar
+                                            try:
+                                                from services.chamados_service import notificar_chamado_retornado
+                                                notificar_chamado_retornado(ch['id'], mensagem_retorno)
+                                            except:
+                                                pass
+                                            
                                             st.rerun()
                                         else:
                                             st.error(msg)
@@ -541,8 +466,6 @@ def tela_chamados(usuario, perfil):
                             with st.form(key=f"form_finalizar_{ch['id']}"):
                                 st.success("Use se o problema FOI resolvido.")
                                 
-                                st.write("")
-                                
                                 submit_finalizar = st.form_submit_button(
                                     "✅ Finalizar Definitivamente", 
                                     type="primary", 
@@ -557,12 +480,20 @@ def tela_chamados(usuario, perfil):
                                         
                                         if sucesso:
                                             st.success(msg)
+                                            
+                                            # Notificar
+                                            try:
+                                                from services.chamados_service import notificar_chamado_finalizado
+                                                notificar_chamado_finalizado(ch['id'])
+                                            except:
+                                                pass
+                                            
                                             st.balloons()
                                             st.rerun()
                                         else:
                                             st.error(msg)
                     
-                    # Anexos
+                    # ========== ANEXOS ==========
                     st.divider()
                     st.write("**📎 Anexos:**")
                     
@@ -579,12 +510,14 @@ def tela_chamados(usuario, perfil):
                             with col_a2:
                                 if os.path.exists(anexo['caminho_arquivo']):
                                     with open(anexo['caminho_arquivo'], 'rb') as f:
-                                        st.download_button(
+                                        dados = f.read()
+                                        if st.download_button(
                                             label="⬇️",
-                                            data=f.read(),
+                                            data=dados,
                                             file_name=anexo['nome_arquivo'],
                                             key=f"dl_{anexo['id']}"
-                                        )
+                                        ):
+                                            registrar_download(usuario, anexo['nome_arquivo'], anexo['caminho_arquivo'], ch['id'])
                     else:
                         st.info("Sem anexos")
     

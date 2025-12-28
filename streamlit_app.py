@@ -1,6 +1,7 @@
 """
 Entry point para Streamlit Cloud
 Este arquivo deve estar na RAIZ do projeto
+NÃO expõe main.py - apenas importa e executa
 """
 
 import sys
@@ -12,6 +13,5 @@ if app_dir not in sys.path:
     sys.path.insert(0, app_dir)
 
 # Importar e executar main do app
-if __name__ == "__main__":
-    from app.main import main
-    main()
+from app.main import main
+main()

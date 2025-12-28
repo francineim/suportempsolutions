@@ -1,9 +1,39 @@
 # app/utils.py
+"""
+Utilitários do Sistema Helpdesk
+SEMPRE usa horário de Brasília (UTC-3)
+"""
+
 import hashlib
 import secrets
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import re
+
+# ========== TIMEZONE BRASÍLIA ==========
+
+# Definir timezone de Brasília (UTC-3)
+BRASILIA_TZ = timezone(timedelta(hours=-3))
+
+def agora_brasilia():
+    """
+    Retorna datetime atual no horário de Brasília.
+    SEMPRE use esta função para obter a hora atual.
+    """
+    return datetime.now(BRASILIA_TZ)
+
+def agora_brasilia_str():
+    """
+    Retorna datetime atual de Brasília como string formatada para banco.
+    Formato: YYYY-MM-DD HH:MM:SS
+    """
+    return agora_brasilia().strftime("%Y-%m-%d %H:%M:%S")
+
+def agora_brasilia_hora():
+    """
+    Retorna hora atual de Brasília no formato HH:MM:SS
+    """
+    return agora_brasilia().strftime("%H:%M:%S")
 
 # ========== SEGURANÇA DE SENHAS ==========
 
@@ -37,7 +67,8 @@ def validar_arquivo(arquivo):
 
 def gerar_nome_arquivo_seguro(nome_original):
     """Gera nome de arquivo único e seguro."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Usar horário de Brasília
+    timestamp = agora_brasilia().strftime("%Y%m%d_%H%M%S")
     uuid_parte = secrets.token_hex(4)
     nome_limpo = "".join(c for c in nome_original if c.isalnum() or c in "._- ")
     nome, extensao = os.path.splitext(nome_limpo)
@@ -61,11 +92,10 @@ def formatar_tempo(segundos):
     minutos = (segundos % 3600) // 60
     segs = segundos % 60
     
-    # IMPLEMENTAÇÃO 7: Formato HH:MM:SS
     return f"{horas:02d}:{minutos:02d}:{segs:02d}"
 
 def formatar_data_br(data_str):
-    """Formata data para padrão brasileiro."""
+    """Formata data para padrão brasileiro DD/MM/YYYY HH:MM."""
     if not data_str:
         return ""
     
@@ -77,6 +107,21 @@ def formatar_data_br(data_str):
         
         data = datetime.strptime(data_str, "%Y-%m-%d %H:%M:%S")
         return data.strftime("%d/%m/%Y %H:%M")
+    except:
+        return str(data_str)
+
+def formatar_data_hora_br(data_str):
+    """Formata data para padrão brasileiro com segundos DD/MM/YYYY HH:MM:SS."""
+    if not data_str:
+        return ""
+    
+    try:
+        data_str = str(data_str).strip()
+        if '.' in data_str:
+            data_str = data_str.split('.')[0]
+        
+        data = datetime.strptime(data_str, "%Y-%m-%d %H:%M:%S")
+        return data.strftime("%d/%m/%Y %H:%M:%S")
     except:
         return str(data_str)
 
@@ -103,6 +148,7 @@ def badge_status(status):
         "Novo": "🔴",
         "Em atendimento": "🟡",
         "Aguardando Finalização": "🟦",
+        "Aguardando Cliente": "🟠",
         "Finalizado": "✅",
         "Cancelado": "⚫"
     }
@@ -147,8 +193,19 @@ def sanitizar_texto(texto):
 # ========== UTILITÁRIOS ==========
 
 def registrar_log(acao, usuario, detalhes=""):
-    """Registra ação do usuário."""
-    pass  # Implementar se necessário
+    """Registra ação do usuário no log."""
+    try:
+        from database import conectar
+        conn = conectar()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO logs_sistema (acao, usuario, detalhes, data_hora)
+            VALUES (?, ?, ?, ?)
+        """, (acao, usuario, detalhes, agora_brasilia_str()))
+        conn.commit()
+        conn.close()
+    except:
+        pass  # Silenciosamente falha se tabela não existir
 
 def verificar_timeout_sessao():
     """Verifica timeout de sessão."""

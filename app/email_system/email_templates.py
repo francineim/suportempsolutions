@@ -1,18 +1,20 @@
-# app/email/email_templates.py
+# app/email_system/email_templates.py
 """
-Templates HTML para e-mails do sistema
+Templates de E-mail do Sistema Helpdesk
 """
 
+from utils import formatar_data_br, agora_brasilia
+
 def template_base(titulo, conteudo):
-    """Template base para todos os e-mails."""
+    """Template base HTML para todos os e-mails."""
     return f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <meta charset="UTF-8">
+        <meta charset="utf-8">
         <style>
             body {{
-                font-family: Arial, sans-serif;
+                font-family: 'Segoe UI', Arial, sans-serif;
                 line-height: 1.6;
                 color: #333;
                 max-width: 600px;
@@ -30,33 +32,34 @@ def template_base(titulo, conteudo):
                 margin: 0;
                 font-size: 24px;
             }}
+            .header p {{
+                margin: 10px 0 0 0;
+                opacity: 0.9;
+            }}
             .content {{
-                background: #f9f9f9;
+                background: #ffffff;
                 padding: 30px;
                 border: 1px solid #ddd;
                 border-top: none;
             }}
             .chamado-info {{
-                background: white;
+                background: #f8f9fa;
                 padding: 20px;
                 border-radius: 8px;
                 margin: 20px 0;
                 border-left: 4px solid #667eea;
             }}
             .chamado-info p {{
-                margin: 10px 0;
-            }}
-            .chamado-info strong {{
-                color: #667eea;
+                margin: 8px 0;
             }}
             .mensagem-box {{
-                background: white;
+                background: #fff3e0;
                 padding: 15px;
                 border-radius: 8px;
-                margin: 15px 0;
-                border: 1px solid #e0e0e0;
+                margin: 20px 0;
+                border-left: 4px solid #ff9800;
             }}
-            .button {{
+            .btn {{
                 display: inline-block;
                 padding: 12px 30px;
                 background: #667eea;
@@ -73,6 +76,8 @@ def template_base(titulo, conteudo):
                 font-size: 12px;
                 border-top: 1px solid #ddd;
                 margin-top: 20px;
+                background: #f8f9fa;
+                border-radius: 0 0 10px 10px;
             }}
             .status {{
                 display: inline-block;
@@ -93,18 +98,28 @@ def template_base(titulo, conteudo):
                 background: #e8f5e9;
                 color: #2e7d32;
             }}
+            .status-aguardando {{
+                background: #e3f2fd;
+                color: #1565c0;
+            }}
+            .logo-text {{
+                font-size: 28px;
+                margin-bottom: 5px;
+            }}
         </style>
     </head>
     <body>
         <div class="header">
-            <h1>🎫 Helpdesk – MP Solutions</h1>
+            <div class="logo-text">🎫</div>
+            <h1>Helpdesk – MP Solutions</h1>
             <p>{titulo}</p>
         </div>
         <div class="content">
             {conteudo}
         </div>
         <div class="footer">
-            <p>Este é um e-mail automático. Por favor, não responda.</p>
+            <p>Este é um e-mail automático do Sistema Helpdesk.</p>
+            <p>Por favor, não responda diretamente a este e-mail.</p>
             <p>© 2024 MP Solutions - Todos os direitos reservados</p>
         </div>
     </body>
@@ -113,6 +128,8 @@ def template_base(titulo, conteudo):
 
 def email_novo_chamado_admin(chamado):
     """E-mail para admin quando novo chamado é aberto."""
+    data_formatada = formatar_data_br(chamado.get('data_abertura', ''))
+    
     conteudo = f"""
         <h2>📢 Novo Chamado Aberto</h2>
         <p>Um novo chamado foi registrado no sistema e aguarda atendimento.</p>
@@ -123,7 +140,7 @@ def email_novo_chamado_admin(chamado):
             <p><strong>Prioridade:</strong> <span class="status status-novo">{chamado['prioridade']}</span></p>
             <p><strong>Cliente:</strong> {chamado['usuario']}</p>
             <p><strong>Empresa:</strong> {chamado.get('empresa', 'Não informada')}</p>
-            <p><strong>Data:</strong> {chamado['data_abertura']}</p>
+            <p><strong>Data:</strong> {data_formatada}</p>
         </div>
         
         <div class="mensagem-box">
@@ -131,13 +148,15 @@ def email_novo_chamado_admin(chamado):
             <p>{chamado['descricao']}</p>
         </div>
         
-        <p>⚠️ Acesse o sistema para iniciar o atendimento.</p>
+        <p>⚠️ <strong>Acesse o sistema para iniciar o atendimento.</strong></p>
     """
     
     return template_base("Novo Chamado Recebido", conteudo)
 
 def email_novo_chamado_cliente(chamado):
     """E-mail de confirmação para cliente quando abre chamado."""
+    data_formatada = formatar_data_br(chamado.get('data_abertura', ''))
+    
     conteudo = f"""
         <h2>✅ Chamado Registrado com Sucesso</h2>
         <p>Olá <strong>{chamado['usuario']}</strong>,</p>
@@ -148,7 +167,7 @@ def email_novo_chamado_cliente(chamado):
             <p><strong>Assunto:</strong> {chamado['assunto']}</p>
             <p><strong>Prioridade:</strong> <span class="status status-novo">{chamado['prioridade']}</span></p>
             <p><strong>Status:</strong> <span class="status status-novo">Novo</span></p>
-            <p><strong>Data de Abertura:</strong> {chamado['data_abertura']}</p>
+            <p><strong>Data de Abertura:</strong> {data_formatada}</p>
         </div>
         
         <div class="mensagem-box">
@@ -162,8 +181,8 @@ def email_novo_chamado_cliente(chamado):
     
     return template_base("Chamado Registrado", conteudo)
 
-def email_chamado_concluido(chamado, mensagem_conclusao):
-    """E-mail para cliente quando chamado é concluído."""
+def email_chamado_concluido(chamado, mensagem_conclusao=None):
+    """E-mail para cliente quando chamado é concluído pelo admin."""
     conteudo = f"""
         <h2>✅ Chamado Concluído</h2>
         <p>Olá <strong>{chamado['usuario']}</strong>,</p>
@@ -172,7 +191,7 @@ def email_chamado_concluido(chamado, mensagem_conclusao):
         <div class="chamado-info">
             <p><strong>Chamado:</strong> #{chamado['id']}</p>
             <p><strong>Assunto:</strong> {chamado['assunto']}</p>
-            <p><strong>Status:</strong> <span class="status status-concluido">Concluído</span></p>
+            <p><strong>Status:</strong> <span class="status status-aguardando">Aguardando Finalização</span></p>
             <p><strong>Atendente:</strong> {chamado.get('atendente', 'N/A')}</p>
             <p><strong>Tempo de Atendimento:</strong> {chamado.get('tempo_formatado', 'N/A')}</p>
         </div>
@@ -187,7 +206,7 @@ def email_chamado_concluido(chamado, mensagem_conclusao):
         <p>Se o problema não foi resolvido ou você precisa de mais informações, 
         você pode <strong>retornar o chamado</strong> através do sistema.</p>
         
-        <p>Caso o problema esteja resolvido, agradecemos por utilizar nossos serviços! 😊</p>
+        <p>Caso o problema esteja resolvido, por favor <strong>finalize o chamado</strong> no sistema. 😊</p>
     """
     
     return template_base("Chamado Concluído", conteudo)
@@ -196,7 +215,7 @@ def email_chamado_retornado_admin(chamado, mensagem_retorno):
     """E-mail para admin quando cliente retorna chamado."""
     conteudo = f"""
         <h2>🔄 Chamado Retornado pelo Cliente</h2>
-        <p>O cliente retornou um chamado que estava concluído.</p>
+        <p>O cliente retornou um chamado que estava aguardando finalização.</p>
         
         <div class="chamado-info">
             <p><strong>Chamado:</strong> #{chamado['id']}</p>
@@ -208,11 +227,11 @@ def email_chamado_retornado_admin(chamado, mensagem_retorno):
         </div>
         
         <div class="mensagem-box">
-            <strong>Mensagem do Cliente:</strong>
+            <strong>Motivo do Retorno:</strong>
             <p>{mensagem_retorno}</p>
         </div>
         
-        <p>⚠️ O chamado foi reaberto e aguarda novo atendimento.</p>
+        <p>⚠️ <strong>O chamado foi reaberto e aguarda novo atendimento.</strong></p>
     """
     
     return template_base("Chamado Retornado", conteudo)
@@ -237,7 +256,8 @@ def email_chamado_retornado_cliente(chamado):
 
 def email_interacao_cliente(chamado, interacao, autor):
     """E-mail para cliente quando há nova interação do atendente."""
-    autor_nome = "Atendente" if autor == "atendente" else "Cliente"
+    autor_nome = "Atendente" if autor == "atendente" else "Sistema"
+    data_formatada = formatar_data_br(interacao.get('data', ''))
     
     conteudo = f"""
         <h2>💬 Nova Mensagem no Chamado #{chamado['id']}</h2>
@@ -247,13 +267,13 @@ def email_interacao_cliente(chamado, interacao, autor):
         <div class="chamado-info">
             <p><strong>Chamado:</strong> #{chamado['id']}</p>
             <p><strong>Assunto:</strong> {chamado['assunto']}</p>
-            <p><strong>Status:</strong> {chamado['status']}</p>
+            <p><strong>Status:</strong> {chamado.get('status', 'N/A')}</p>
         </div>
         
         <div class="mensagem-box">
             <strong>{autor_nome} escreveu:</strong>
-            <p>{interacao['mensagem']}</p>
-            <small style="color: #666;">Em: {interacao['data']}</small>
+            <p>{interacao.get('mensagem', '')}</p>
+            <small style="color: #666;">Em: {data_formatada}</small>
         </div>
         
         <p>Acesse o sistema para visualizar e responder.</p>
@@ -263,6 +283,8 @@ def email_interacao_cliente(chamado, interacao, autor):
 
 def email_interacao_admin(chamado, interacao):
     """E-mail para admin quando cliente interage."""
+    data_formatada = formatar_data_br(interacao.get('data', ''))
+    
     conteudo = f"""
         <h2>💬 Cliente Respondeu no Chamado #{chamado['id']}</h2>
         
@@ -270,15 +292,61 @@ def email_interacao_admin(chamado, interacao):
             <p><strong>Chamado:</strong> #{chamado['id']}</p>
             <p><strong>Assunto:</strong> {chamado['assunto']}</p>
             <p><strong>Cliente:</strong> {chamado['usuario']}</p>
-            <p><strong>Status:</strong> {chamado['status']}</p>
+            <p><strong>Empresa:</strong> {chamado.get('empresa', 'N/A')}</p>
+            <p><strong>Status:</strong> {chamado.get('status', 'N/A')}</p>
         </div>
         
         <div class="mensagem-box">
             <strong>Mensagem do cliente:</strong>
-            <p>{interacao['mensagem']}</p>
+            <p>{interacao.get('mensagem', '')}</p>
+            <small style="color: #666;">Em: {data_formatada}</small>
         </div>
         
-        <p>⚠️ Acesse o sistema para visualizar e responder.</p>
+        <p>⚠️ <strong>Acesse o sistema para visualizar e responder.</strong></p>
     """
     
     return template_base("Nova Resposta do Cliente", conteudo)
+
+def email_chamado_finalizado(chamado):
+    """E-mail para admin quando cliente finaliza o chamado."""
+    conteudo = f"""
+        <h2>✅ Chamado Finalizado pelo Cliente</h2>
+        <p>O cliente confirmou que o problema foi resolvido.</p>
+        
+        <div class="chamado-info">
+            <p><strong>Chamado:</strong> #{chamado['id']}</p>
+            <p><strong>Assunto:</strong> {chamado['assunto']}</p>
+            <p><strong>Cliente:</strong> {chamado['usuario']}</p>
+            <p><strong>Empresa:</strong> {chamado.get('empresa', 'N/A')}</p>
+            <p><strong>Status:</strong> <span class="status status-concluido">Finalizado</span></p>
+            <p><strong>Tempo Total:</strong> {chamado.get('tempo_formatado', 'N/A')}</p>
+        </div>
+        
+        <p>🎉 <strong>Bom trabalho!</strong></p>
+    """
+    
+    return template_base("Chamado Finalizado", conteudo)
+
+def email_retorno_admin_cliente(chamado, mensagem):
+    """E-mail para cliente quando admin retorna com uma pergunta."""
+    conteudo = f"""
+        <h2>📨 Precisamos de mais informações</h2>
+        <p>Olá <strong>{chamado['usuario']}</strong>,</p>
+        <p>O atendente enviou uma mensagem sobre seu chamado.</p>
+        
+        <div class="chamado-info">
+            <p><strong>Chamado:</strong> #{chamado['id']}</p>
+            <p><strong>Assunto:</strong> {chamado['assunto']}</p>
+            <p><strong>Atendente:</strong> {chamado.get('atendente', 'N/A')}</p>
+            <p><strong>Status:</strong> <span class="status status-aguardando">Aguardando Cliente</span></p>
+        </div>
+        
+        <div class="mensagem-box">
+            <strong>Mensagem do Atendente:</strong>
+            <p>{mensagem}</p>
+        </div>
+        
+        <p>⚠️ <strong>Por favor, acesse o sistema para responder.</strong></p>
+    """
+    
+    return template_base("Aguardando sua Resposta", conteudo)
