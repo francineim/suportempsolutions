@@ -173,7 +173,7 @@ def tela_chamados(usuario, perfil):
             st.caption(f"📊 Total: {len(chamados)} chamado(s)")
             
             # Exibir chamados
-            for ch in chamados:
+            for idx, ch in enumerate(chamados):
                 status_badge = badge_status(ch['status'])
                 prioridade_badge = badge_prioridade(ch['prioridade'])
                 
@@ -205,7 +205,14 @@ def tela_chamados(usuario, perfil):
                     # Descrição
                     st.write("**📝 Descrição:**")
                     descricao = buscar_descricao_chamado(ch['id'])
-                    st.text_area("", value=descricao, disabled=True, height=100, key=f"desc_{ch['id']}", label_visibility="collapsed")
+                    st.text_area(
+                        f"Descrição do chamado {ch['id']}", 
+                        value=descricao if descricao else "", 
+                        disabled=True, 
+                        height=100, 
+                        key=f"desc_{ch['id']}_{idx}",
+                        label_visibility="collapsed"
+                    )
                     
                     # ========== AÇÕES DO ADMIN ==========
                     if perfil == "admin":
@@ -217,7 +224,7 @@ def tela_chamados(usuario, perfil):
                         # Iniciar atendimento
                         if ch['status'] == 'Novo':
                             with col_a1:
-                                if st.button("▶️ Iniciar", key=f"iniciar_{ch['id']}", use_container_width=True):
+                                if st.button("▶️ Iniciar", key=f"iniciar_{ch['id']}_{idx}", use_container_width=True):
                                     sucesso, msg = iniciar_atendimento_admin(ch['id'], usuario)
                                     if sucesso:
                                         st.success(msg)
@@ -237,7 +244,7 @@ def tela_chamados(usuario, perfil):
                         if ch['status'] == 'Em atendimento':
                             with col_a1:
                                 if ch.get('status_atendimento') == 'em_andamento':
-                                    if st.button("⏸️ Pausar", key=f"pausar_{ch['id']}", use_container_width=True):
+                                    if st.button("⏸️ Pausar", key=f"pausar_{ch['id']}_{idx}", use_container_width=True):
                                         sucesso, msg = pausar_atendimento(ch['id'])
                                         if sucesso:
                                             st.success(msg)
@@ -245,7 +252,7 @@ def tela_chamados(usuario, perfil):
                                         else:
                                             st.error(msg)
                                 else:
-                                    if st.button("▶️ Retomar", key=f"retomar_{ch['id']}", use_container_width=True):
+                                    if st.button("▶️ Retomar", key=f"retomar_{ch['id']}_{idx}", use_container_width=True):
                                         sucesso, msg = retomar_atendimento(ch['id'])
                                         if sucesso:
                                             st.success(msg)
@@ -258,20 +265,20 @@ def tela_chamados(usuario, perfil):
                                 with st.popover("✅ Concluir"):
                                     st.write("**Mensagem de conclusão:**")
                                     msg_conclusao = st.text_area(
-                                        "Mensagem",
+                                        f"Mensagem de conclusão {ch['id']}",
                                         placeholder="Descreva o que foi feito...",
-                                        key=f"msg_conclusao_{ch['id']}",
+                                        key=f"msg_conclusao_{ch['id']}_{idx}",
                                         label_visibility="collapsed"
                                     )
                                     
                                     # Anexo de conclusão
                                     arquivo_conclusao = st.file_uploader(
                                         "Anexar arquivo",
-                                        key=f"anexo_conclusao_{ch['id']}",
+                                        key=f"anexo_conclusao_{ch['id']}_{idx}",
                                         type=['pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'jpg', 'jpeg', 'png']
                                     )
                                     
-                                    if st.button("✅ Confirmar Conclusão", key=f"confirmar_conclusao_{ch['id']}", type="primary"):
+                                    if st.button("✅ Confirmar Conclusão", key=f"confirmar_conclusao_{ch['id']}_{idx}", type="primary"):
                                         # Processar anexo
                                         arquivos_conclusao = None
                                         if arquivo_conclusao:
@@ -304,20 +311,20 @@ def tela_chamados(usuario, perfil):
                                 with st.popover("🔄 Retornar"):
                                     st.write("**Retornar ao cliente:**")
                                     msg_retorno_admin = st.text_area(
-                                        "Mensagem",
+                                        f"Mensagem de retorno {ch['id']}",
                                         placeholder="Informe o que precisa do cliente...",
-                                        key=f"msg_retorno_admin_{ch['id']}",
+                                        key=f"msg_retorno_admin_{ch['id']}_{idx}",
                                         label_visibility="collapsed"
                                     )
                                     
                                     # Anexo de retorno
                                     arquivo_retorno = st.file_uploader(
                                         "Anexar arquivo",
-                                        key=f"anexo_retorno_{ch['id']}",
+                                        key=f"anexo_retorno_{ch['id']}_{idx}",
                                         type=['pdf', 'doc', 'docx', 'txt', 'xlsx', 'xls', 'jpg', 'jpeg', 'png']
                                     )
                                     
-                                    if st.button("🔄 Enviar para Cliente", key=f"enviar_retorno_{ch['id']}"):
+                                    if st.button("🔄 Enviar para Cliente", key=f"enviar_retorno_{ch['id']}_{idx}"):
                                         if not msg_retorno_admin:
                                             st.error("Informe o motivo do retorno")
                                         else:
@@ -355,7 +362,7 @@ def tela_chamados(usuario, perfil):
                     interacoes = buscar_interacoes_chamado(ch['id'])
                     
                     if interacoes:
-                        for inter in interacoes:
+                        for inter_idx, inter in enumerate(interacoes):
                             autor_icon = "👤" if inter['autor'] == 'cliente' else "🛠️"
                             autor_nome = "Cliente" if inter['autor'] == 'cliente' else "Atendente"
                             
@@ -371,25 +378,25 @@ def tela_chamados(usuario, perfil):
                             # Anexos da interação
                             anexos_inter = buscar_anexos_interacao(inter['id'])
                             if anexos_inter:
-                                for anexo in anexos_inter:
+                                for anx_idx, anexo in enumerate(anexos_inter):
                                     if os.path.exists(anexo['caminho_arquivo']):
                                         with open(anexo['caminho_arquivo'], 'rb') as f:
                                             st.download_button(
                                                 f"📎 {anexo['nome_arquivo']}",
                                                 f.read(),
                                                 anexo['nome_arquivo'],
-                                                key=f"dl_inter_{inter['id']}_{anexo['id']}"
+                                                key=f"dl_inter_{ch['id']}_{inter['id']}_{anexo['id']}_{inter_idx}_{anx_idx}"
                                             )
                     else:
                         st.info("Sem interações registradas")
                     
                     # Nova mensagem
                     if ch['status'] not in ['Finalizado', 'Cancelado']:
-                        with st.form(key=f"form_msg_{ch['id']}"):
+                        with st.form(key=f"form_msg_{ch['id']}_{idx}"):
                             nova_mensagem = st.text_area(
                                 "Nova mensagem",
                                 placeholder="Digite sua mensagem...",
-                                key=f"nova_msg_{ch['id']}"
+                                key=f"nova_msg_{ch['id']}_{idx}"
                             )
                             
                             if st.form_submit_button("📤 Enviar Mensagem"):
@@ -399,14 +406,6 @@ def tela_chamados(usuario, perfil):
                                     
                                     if sucesso:
                                         st.success("Mensagem enviada!")
-                                        
-                                        # Notificar
-                                        try:
-                                            from services.chamados_service import criar_interacao
-                                            # Já foi criada acima, só precisa notificar
-                                        except:
-                                            pass
-                                        
                                         st.rerun()
                                     else:
                                         st.error(msg)
@@ -416,23 +415,23 @@ def tela_chamados(usuario, perfil):
                         st.divider()
                         
                         # Mensagem de conclusão
-                        msg_conclusao = buscar_mensagem_conclusao(ch['id'])
-                        if msg_conclusao:
-                            st.info(f"**Mensagem do Atendente:** {msg_conclusao.get('mensagem', '')}")
+                        msg_conclusao_dados = buscar_mensagem_conclusao(ch['id'])
+                        if msg_conclusao_dados:
+                            st.info(f"**Mensagem do Atendente:** {msg_conclusao_dados.get('mensagem', '')}")
                         
                         col_btn1, col_btn2 = st.columns(2)
                         
                         with col_btn1:
                             st.write("**🔄 Retornar Chamado**")
                             
-                            with st.form(key=f"form_retorno_{ch['id']}"):
+                            with st.form(key=f"form_retorno_{ch['id']}_{idx}"):
                                 st.warning("Use se o problema NÃO foi resolvido.")
                                 
                                 mensagem_retorno = st.text_area(
                                     "Por que está retornando?",
                                     placeholder="Explique o motivo...",
                                     height=100,
-                                    key=f"txt_retorno_{ch['id']}"
+                                    key=f"txt_retorno_{ch['id']}_{idx}"
                                 )
                                 
                                 if st.form_submit_button("🔙 Retornar", type="secondary", use_container_width=True):
@@ -460,10 +459,10 @@ def tela_chamados(usuario, perfil):
                             
                             confirmar = st.checkbox(
                                 "✅ Confirmo que foi resolvido",
-                                key=f"confirm_finalizar_{ch['id']}"
+                                key=f"confirm_finalizar_{ch['id']}_{idx}"
                             )
                             
-                            with st.form(key=f"form_finalizar_{ch['id']}"):
+                            with st.form(key=f"form_finalizar_{ch['id']}_{idx}"):
                                 st.success("Use se o problema FOI resolvido.")
                                 
                                 submit_finalizar = st.form_submit_button(
@@ -500,7 +499,7 @@ def tela_chamados(usuario, perfil):
                     anexos = buscar_anexos(ch['id'])
                     
                     if anexos:
-                        for anexo in anexos:
+                        for anx_idx, anexo in enumerate(anexos):
                             col_a1, col_a2 = st.columns([3, 1])
                             
                             with col_a1:
@@ -515,7 +514,7 @@ def tela_chamados(usuario, perfil):
                                             label="⬇️",
                                             data=dados,
                                             file_name=anexo['nome_arquivo'],
-                                            key=f"dl_{anexo['id']}"
+                                            key=f"dl_{ch['id']}_{anexo['id']}_{idx}_{anx_idx}"
                                         ):
                                             registrar_download(usuario, anexo['nome_arquivo'], anexo['caminho_arquivo'], ch['id'])
                     else:
